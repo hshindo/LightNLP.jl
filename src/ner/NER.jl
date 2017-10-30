@@ -1,10 +1,10 @@
 module NER
 
 using Merlin
-using HDF5
 using ProgressMeter
-using JLD2, FileIO
 
-
+include("bioes.jl")
+include("nn.jl")
+include("decoder.jl")
 
 end

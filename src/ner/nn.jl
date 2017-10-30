@@ -1,5 +1,5 @@
-function setup_model(wordembeds::Vector{Var}, charembeds::Vector{Var}, ntags::Int)
-    T = eltype(wordembeds[1])
+function setup_nn(wordembeds::Vector{Var}, charembeds::Vector{Var}, ntags::Int)
+    T = Float32
     w = Node()
     hw = lookup(wordembeds, w)
 
