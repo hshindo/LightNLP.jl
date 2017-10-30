@@ -16,8 +16,16 @@ julia> Pkg.add("LightNLP")
 
 ## Sentence Segmentation
 
-## POS Tagging
-
 ## Named Entity Recognition
+```
+julia ner.jl
+```
+
+```
+nepochs 5
+trainpath   .data/
+testpath    .data/
+wordembeds_file .data/
+```
 
 ## Syntactic Parsing

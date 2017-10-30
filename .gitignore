@@ -1,5 +1,5 @@
 sandbox.jl
 benchmark.jl
-.data
+data
 *.h5
 *.jld2
