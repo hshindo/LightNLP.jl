@@ -6,7 +6,7 @@ mutable struct Decoder
 end
 
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words = h5read(embedsfile, "key")
+    words = h5read(embedsfile, "words")
     worddict = Dict(words[i] => i for i=1:length(words))
     chardict = Dict("UNKNOWN" => 1)
     for word in words
@@ -19,7 +19,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     tagset = BIOES()
     traindata = readdata(trainfile, worddict, chardict, tagset)
     testdata = readdata(testfile, worddict, chardict, tagset)
-    wordembeds = embeddings(h5read(embedsfile,"value"))
+    wordembeds = embeddings(h5read(embedsfile,"vectors"))
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.05))
     nn = NN(wordembeds, charembeds, length(tagset.tag2id))
 
@@ -85,6 +85,7 @@ function encode_word(worddict::Dict, words::Vector{String})
     unkword = worddict["UNKNOWN"]
     ids = map(words) do w
         w = lowercase(w)
+        @assert !isempty(w)
         # w = replace(word, r"[0-9]", '0')
         get(worddict, w, unkword)
     end
@@ -98,6 +99,7 @@ function encode_char(chardict::Dict, words::Vector{String})
     for w in words
         # w = replace(word, r"[0-9]", '0')
         chars = Vector{Char}(w)
+        @assert !isempty(chars)
         push!(batchdims, length(chars))
         for c in chars
             push!(ids, get(chardict,string(c),unkchar))
@@ -111,7 +113,8 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagset)
     words, tags = String[], String[]
     lines = open(readlines, path)
     push!(lines, "")
-    for line in lines
+    for i = 1:length(lines)
+        line = lines[i]
         if isempty(line)
             isempty(words) && continue
             w = encode_word(worddict, words)
@@ -121,9 +124,12 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagset)
             empty!(words)
             empty!(tags)
         else
-            items = split(line, "\t")
-            push!(words, String(items[1]))
-            push!(tags, String(items[2]))
+            items = Vector{String}(split(line,"\t"))
+            items[2] == "O\r" && (items[2] = "O")
+            word = items[1]
+            isempty(word) && (word = "UNKNOWN")
+            push!(words, word)
+            push!(tags, items[2])
         end
     end
     data
