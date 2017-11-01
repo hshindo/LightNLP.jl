@@ -1,7 +1,7 @@
 mutable struct Decoder
     chardict::Dict
     tagset
-    nn::NN
+    nn
 end
 
 function Decoder(vocabfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
