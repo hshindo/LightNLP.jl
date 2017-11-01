@@ -1,5 +1,5 @@
 using LightNLP
-using LightNLP.NER
+using LightNLP.Tokenization
 using JLD2, FileIO
 
 training = true

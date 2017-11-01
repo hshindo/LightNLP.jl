@@ -1,7 +1,5 @@
 # LightNLP
-`LightNLP` is a natural language processing (NLP) library written in [Julia](http://julialang.org/).
-
-`LightNLP` is tested against Julia `0.6` on Linux, OS X, and Windows (x64).
+`LightNLP` is a natural language processing (NLP) toolkit for [Julia](http://julialang.org/).
 
 [![Build Status](https://travis-ci.org/hshindo/LightNLP.jl.svg?branch=master)](https://travis-ci.org/hshindo/LightNLP.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/5wleyc2a1v1rldq8?svg=true)](https://ci.appveyor.com/project/hshindo/lightnlp-jl)
@@ -14,18 +12,21 @@
 julia> Pkg.add("LightNLP")
 ```
 
-## Sentence Segmentation
+## Tokenization
+### Training
 
-## Named Entity Recognition
+### Decoding
+
+
+## Named Entity Recognition (NER)
+### Training
+First, download [pre-trained word embeddings](https://cl.naist.jp/~shindo/glove.6B.100d.h5) and put it in `.data/`.  
+Then, run the script:
 ```
-julia ner.jl
+julia train.jl <trainfile> <testfile>
 ```
 
+### Decoding
 ```
-nepochs 5
-trainpath   .data/
-testpath    .data/
-wordembeds_file .data/
+julia test.jl <modelfile> <testfile>
 ```
-
-## Syntactic Parsing

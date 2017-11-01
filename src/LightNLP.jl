@@ -1,7 +1,6 @@
 module LightNLP
 
-export train
-
 include("ner/NER.jl")
+include("tokenization/Tokenization.jl")
 
 end
