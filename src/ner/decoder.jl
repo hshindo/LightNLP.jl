@@ -1,33 +1,28 @@
 mutable struct Decoder
-    worddict::Dict
+    worddict1::Dict
+    worddict2::Dict
     chardict::Dict
-    tagset
+    tagdict::Dict
     nn
 end
 
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words = h5read(embedsfile, "words")
-    worddict = Dict(words[i] => i for i=1:length(words))
-    chardict = Dict("UNKNOWN" => 1)
-    for word in words
-        for c in Vector{Char}(word)
-            get!(chardict, string(c), length(chardict)+1)
-            get!(chardict, string(uppercase(c)), length(chardict)+1)
-        end
-    end
-
-    tagset = BIOES()
-    traindata = readdata(trainfile, worddict, chardict, tagset)
-    testdata = readdata(testfile, worddict, chardict, tagset)
-    wordembeds = embeddings(h5read(embedsfile,"vectors"))
+    words1 = h5read(embedsfile, "key")
+    worddict1 = Dict(words1[i] => i for i=1:length(words1))
+    wordembeds1 = Var(h5read(embedsfile,"value"))
+    worddict2, chardict, tagdict = initvocab(trainfile)
+    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Zeros())
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.05))
-    nn = NN(wordembeds, charembeds, length(tagset.tag2id))
+    traindata = readdata(trainfile, worddict1, worddict2, chardict, tagdict)
+    testdata = readdata(testfile, worddict1, worddict2, chardict, tagdict)
+    nn = NN(wordembeds1, wordembeds2, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
     info("#Testing examples:\t$(length(testdata))")
-    info("#Words:\t$(length(worddict))")
+    info("#Words1:\t$(length(worddict1))")
+    info("#Words2:\t$(length(worddict2))")
     info("#Chars:\t$(length(chardict))")
-    info("#Tags:\t$(length(tagset.tag2id))")
+    info("#Tags:\t$(length(tagdict))")
     testdata = batch(testdata, 100)
 
     opt = SGD()
@@ -41,8 +36,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         prog = Progress(length(batches))
         loss = 0.0
         for i in 1:length(batches)
-            w, c, t = batches[i]
-            y = nn(w, c, t)
+            y = nn(batches[i]...)
             loss += sum(y.data)
             params = gradient!(y)
             foreach(opt, params)
@@ -55,24 +49,73 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         println("Testing...")
         preds = Int[]
         golds = Int[]
-        for (w,c,t) in testdata
-            y = nn(w, c)
+        for (w1,w2,c,t) in testdata
+            y = nn(w1, w2, c)
             append!(preds, y)
             append!(golds, t.data)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 
-        preds = decode(tagset, preds)
-        golds = decode(tagset, golds)
+        preds = BIOES.decode(preds, tagdict)
+        golds = BIOES.decode(golds, tagdict)
         fscore(golds, preds)
         println()
     end
     Decoder(worddict, chardict, tagset, nn)
 end
 
+function initvocab(path::String)
+    worddict = Dict{String,Int}()
+    chardict = Dict{String,Int}()
+    tagdict = Dict{String,Int}()
+    lines = open(readlines, path)
+    for line in lines
+        isempty(line) && continue
+        items = Vector{String}(split(line,"\t"))
+        word = lowercase(items[1])
+        if haskey(worddict, word)
+            worddict[word] += 1
+        else
+            worddict[word] = 1
+        end
+        chars = Vector{Char}(word)
+        for c in chars
+            c = string(c)
+            if haskey(chardict, c)
+                chardict[c] += 1
+            else
+                chardict[c] = 1
+            end
+        end
+        tag = items[2]
+        haskey(tagdict,tag) || (tagdict[tag] = length(tagdict)+1)
+    end
+
+    words = String[]
+    for (k,v) in worddict
+        v >= 5 && push!(words,k)
+    end
+    worddict = Dict(words[i] => i for i=1:length(words))
+    worddict["UNKNOWN"] = length(worddict) + 1
+
+    chars = String[]
+    for (k,v) in chardict
+        v >= 5 && push!(chars,k)
+    end
+    chardict = Dict(chars[i] => i for i=1:length(chars))
+    chardict["UNKNOWN"] = length(chardict) + 1
+
+    worddict, chardict, tagdict
+end
+
 function decode(dec::Decoder, path::String)
+    data = readdata(path, dec.worddict, dec.chardict, dec.tagset)
+
     lines = open(readlines, path)
     map(lines) do line
+        items = Vector{String}(split(line,"\t"))
+        word = items[1]
+
         words = Vector{String}(split(line," "))
         w = encode_word(dec.worddict, words)
         c = encode_char(dec.chardict, words)
@@ -81,58 +124,62 @@ function decode(dec::Decoder, path::String)
     end
 end
 
-function encode_word(worddict::Dict, words::Vector{String})
-    unkword = worddict["UNKNOWN"]
-    ids = map(words) do w
-        w = lowercase(w)
-        @assert !isempty(w)
-        # w = replace(word, r"[0-9]", '0')
-        get(worddict, w, unkword)
-    end
-    Var(ids)
-end
-
-function encode_char(chardict::Dict, words::Vector{String})
-    unkchar = chardict["UNKNOWN"]
-    batchdims = Int[]
-    ids = Int[]
-    for w in words
-        # w = replace(word, r"[0-9]", '0')
-        chars = Vector{Char}(w)
-        @assert !isempty(chars)
-        push!(batchdims, length(chars))
-        for c in chars
-            push!(ids, get(chardict,string(c),unkchar))
-        end
-    end
-    Var(ids, batchdims)
-end
-
-function readdata(path::String, worddict::Dict, chardict::Dict, tagset)
-    data = NTuple{3,Var}[]
+function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict, tagdict::Dict)
+    data = Tuple[]
     words, tags = String[], String[]
+    unkword1 = worddict1["UNKNOWN"]
+    unkword2 = worddict2["UNKNOWN"]
+    unkchar = chardict["UNKNOWN"]
+
     lines = open(readlines, path)
     push!(lines, "")
     for i = 1:length(lines)
         line = lines[i]
         if isempty(line)
             isempty(words) && continue
-            w = encode_word(worddict, words)
-            c = encode_char(chardict, words)
-            t = Var(encode(tagset,tags))
-            push!(data, (w,c,t))
+            wordids1 = Int[]
+            wordids2 = Int[]
+            charbatchdims = Int[]
+            charids = Int[]
+            for w in words
+                # w = replace(word, r"[0-9]", '0')
+                id = get(worddict1, lowercase(w), unkword1)
+                push!(wordids1, id)
+                id = get(worddict2, lowercase(w), unkword2)
+                push!(wordids2, id)
+
+                chars = Vector{Char}(w)
+                push!(charbatchdims, length(chars))
+                for c in chars
+                    push!(charids, get(chardict,string(c),unkchar))
+                end
+            end
+            w1 = Var(wordids1)
+            w2 = Var(wordids2)
+            c = Var(charids, charbatchdims)
+
+            if isempty(tags)
+                push!(data, (w1,w2,c))
+            else
+                tagids = map(t -> tagdict[t], tags)
+                t = Var(tagids)
+                push!(data, (w1,w2,c,t))
+            end
             empty!(words)
             empty!(tags)
         else
             items = Vector{String}(split(line,"\t"))
-            items[2] == "O\r" && (items[2] = "O")
             word = items[1]
             isempty(word) && (word = "UNKNOWN")
             push!(words, word)
-            push!(tags, items[2])
+            if length(items) >= 2
+                tag = items[2]
+                tag == "O\r" && (tag = "O")
+                push!(tags, tag)
+            end
         end
     end
-    data
+    Array{typeof(data[1])}(data)
 end
 
 function fscore(golds::Vector{T}, preds::Vector{T}) where T
