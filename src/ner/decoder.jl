@@ -1,3 +1,5 @@
+export decode
+
 mutable struct Decoder
     worddict1::Dict
     worddict2::Dict
@@ -61,7 +63,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         fscore(golds, preds)
         println()
     end
-    Decoder(worddict, chardict, tagset, nn)
+    Decoder(worddict1, worddict2, chardict, tagdict, nn)
 end
 
 function initvocab(path::String)
@@ -109,18 +111,26 @@ function initvocab(path::String)
 end
 
 function decode(dec::Decoder, path::String)
-    data = readdata(path, dec.worddict, dec.chardict, dec.tagset)
+    data = readdata(path, dec.worddict1, dec.worddict2, dec.chardict, dec.tagdict)
+    data = batch(data, 100)
+    id2tag = Array{String}(length(dec.tagdict))
+    for (k,v) in dec.tagdict
+        id2tag[v] = k
+    end
+
+    preds = Int[]
+    for x in data
+        y = dec.nn(x[1], x[2], x[3])
+        append!(preds, y)
+    end
 
     lines = open(readlines, path)
-    map(lines) do line
-        items = Vector{String}(split(line,"\t"))
-        word = items[1]
-
-        words = Vector{String}(split(line," "))
-        w = encode_word(dec.worddict, words)
-        c = encode_char(dec.chardict, words)
-        y = dec.nn(w, c)
-        decode(dec.tagset, y)
+    i = 1
+    for line in lines
+        isempty(line) && continue
+        tag = id2tag[preds[i]]
+        println("$line\t$tag")
+        i += 1
     end
 end
 

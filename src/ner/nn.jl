@@ -8,10 +8,6 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     hw1 = lookup(wordembeds1, w1)
     w2 = Node()
     hw2 = lookup(wordembeds2, w2)
-    hw = concat(1, hw1, hw2)
-    hw = Linear(T,200,100)(hw)
-    hw = relu(hw)
-    #hw = hw1 + hw2
 
     c = Node()
     hc = lookup(charembeds, c)
@@ -20,8 +16,8 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     hc = max(hc, 2)
     hc = resize(hc, batchsize(w1))
 
-    h = concat(1, hw, hc)
-    d = size(wordembeds1,1) + 5size(charembeds[1],1)
+    h = concat(1, hw1, hw2, hc)
+    d = 2size(wordembeds1,1) + 5size(charembeds[1],1)
     dh = 300
     h = Conv1D(T,5,d,dh,2,1)(h)
     h = relu(h)

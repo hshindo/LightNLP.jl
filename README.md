@@ -9,14 +9,8 @@
 
 ## Installation
 ```julia
-julia> Pkg.add("LightNLP")
+julia> Pkg.clone("https://github.com/hshindo/LightNLP.jl.git")
 ```
-
-## Tokenization
-### Training
-
-### Decoding
-
 
 ## Named Entity Recognition (NER)
 ### Training
