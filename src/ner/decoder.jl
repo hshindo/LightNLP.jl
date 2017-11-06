@@ -12,9 +12,10 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     words1 = h5read(embedsfile, "words")
     worddict1 = Dict(words1[i] => i for i=1:length(words1))
     wordembeds1 = Var(h5read(embedsfile,"vectors"))
+    #wordembeds1 = [zerograd(wordembeds1[:,i]) for i=1:size(wordembeds1,2)]
     worddict2, chardict, tagdict = initvocab(trainfile)
     wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Zeros())
-    charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.05))
+    charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
     traindata = readdata(trainfile, worddict1, worddict2, chardict, tagdict)
     testdata = readdata(testfile, worddict1, worddict2, chardict, tagdict)
     nn = NN(wordembeds1, wordembeds2, charembeds, length(tagdict))
@@ -74,11 +75,12 @@ function initvocab(path::String)
     for line in lines
         isempty(line) && continue
         items = Vector{String}(split(line,"\t"))
-        word = lowercase(items[1])
-        if haskey(worddict, word)
-            worddict[word] += 1
+        word = strip(items[1])
+        word0 = replace(lowercase(word), r"[0-9]", '0')
+        if haskey(worddict, word0)
+            worddict[word0] += 1
         else
-            worddict[word] = 1
+            worddict[word0] = 1
         end
         chars = Vector{Char}(word)
         for c in chars
@@ -89,20 +91,20 @@ function initvocab(path::String)
                 chardict[c] = 1
             end
         end
-        tag = items[2]
+        tag = strip(items[2])
         haskey(tagdict,tag) || (tagdict[tag] = length(tagdict)+1)
     end
 
     words = String[]
     for (k,v) in worddict
-        v >= 5 && push!(words,k)
+        v >= 3 && push!(words,k)
     end
     worddict = Dict(words[i] => i for i=1:length(words))
     worddict["UNKNOWN"] = length(worddict) + 1
 
     chars = String[]
     for (k,v) in chardict
-        v >= 5 && push!(chars,k)
+        v >= 3 && push!(chars,k)
     end
     chardict = Dict(chars[i] => i for i=1:length(chars))
     chardict["UNKNOWN"] = length(chardict) + 1
@@ -152,10 +154,10 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
             charbatchdims = Int[]
             charids = Int[]
             for w in words
-                # w = replace(word, r"[0-9]", '0')
-                id = get(worddict1, lowercase(w), unkword1)
+                w0 = replace(lowercase(w), r"[0-9]", '0')
+                id = get(worddict1, w0, unkword1)
                 push!(wordids1, id)
-                id = get(worddict2, lowercase(w), unkword2)
+                id = get(worddict2, w0, unkword2)
                 push!(wordids2, id)
 
                 chars = Vector{Char}(w)
@@ -179,12 +181,11 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
             empty!(tags)
         else
             items = Vector{String}(split(line,"\t"))
-            word = items[1]
-            isempty(word) && (word = "UNKNOWN")
+            word = strip(items[1])
+            @assert !isempty(word)
             push!(words, word)
             if length(items) >= 2
-                tag = items[2]
-                tag == "O\r" && (tag = "O")
+                tag = strip(items[2])
                 push!(tags, tag)
             end
         end

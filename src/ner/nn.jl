@@ -17,7 +17,7 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     hc = resize(hc, batchsize(w1))
 
     h = concat(1, hw1, hw2, hc)
-    d = 2size(wordembeds1,1) + 5size(charembeds[1],1)
+    d = 200 + 5size(charembeds[1],1)
     dh = 300
     h = Conv1D(T,5,d,dh,2,1)(h)
     h = relu(h)
