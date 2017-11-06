@@ -9,9 +9,9 @@ mutable struct Decoder
 end
 
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words1 = h5read(embedsfile, "key")
+    words1 = h5read(embedsfile, "words")
     worddict1 = Dict(words1[i] => i for i=1:length(words1))
-    wordembeds1 = Var(h5read(embedsfile,"value"))
+    wordembeds1 = Var(h5read(embedsfile,"vectors"))
     worddict2, chardict, tagdict = initvocab(trainfile)
     wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Zeros())
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.05))
