@@ -21,12 +21,14 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     dh = 300
     h = Conv1D(T,5,d,dh,2,1)(h)
     h = relu(h)
+    #h = swish(h,zerograd([T(1)]))
 
     istrain = Node()
     for i = 1:2
         h = dropout(h, 0.3, istrain)
         h = Conv1D(T,5,dh,dh,2,1)(h)
         h = relu(h)
+        #h = swish(h,zerograd([T(1)]))
     end
     h = Linear(T,dh,ntags)(h)
     g = Graph(input=(w1,w2,c,istrain), output=h)
