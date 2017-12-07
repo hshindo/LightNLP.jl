@@ -8,19 +8,27 @@ mutable struct Decoder
     nn
 end
 
-function batch(w1::Vector{Int}, w2::Vector{Int}, batchsize::Int)
-    batches = Var[]
-    for i = 1:batchsize:length(data)
-        T = eltype(data[i])
-        N = ndims(data[i])
-        batch = T[]
-        batchdims = Int[]
-        for k = i:min(i+batchsize-1,length(data))
-            append!(batch, data[k].data)
-            append!(batchdims, data[k].batchdims)
-        end
-        batch = reshape(batch, Base.front(size(data[i]))..., sum(batchdims))
-        push!(batches, Var(batch,batchdims))
+struct Sample
+    w1::Var
+    w2::Var
+    c::Var
+    batchdims_w
+    batchdims_c
+    t::Var
+end
+
+function create_batch(samples::Vector{Sample}, batchsize::Int)
+    batches = Sample[]
+    for i = 1:batchsize:length(samples)
+        range = i:min(i+batchsize-1,length(samples))
+        s = samples[range]
+        w1 = Var(cat(1, map(x -> x.w1.data, s)...))
+        w2 = Var(cat(1, map(x -> x.w2.data, s)...))
+        c = Var(cat(1, map(x -> x.c.data, s)...))
+        batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
+        batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
+        t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
+        push!(batches, Sample(w1,w2,c,batchdims_w,batchdims_c,t))
     end
     batches
 end
@@ -43,7 +51,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     info("#Words2:\t$(length(worddict2))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
-    testdata = batch(testdata, 100)
+    testdata = create_batch(testdata, 100)
 
     opt = SGD()
     for epoch = 1:nepochs
@@ -52,11 +60,13 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         println("Learning rate: $(opt.rate)")
 
         shuffle!(traindata)
-        batches = batch(traindata, batchsize)
+        batches = create_batch(traindata, batchsize)
         prog = Progress(length(batches))
         loss = 0.0
         for i in 1:length(batches)
-            y = nn(batches[i]...)
+            s = batches[i]
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
+            y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
             foreach(opt, params)
@@ -69,10 +79,14 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         println("Testing...")
         preds = Int[]
         golds = Int[]
-        for (w1,w2,c,t) in testdata
-            y = nn(w1, w2, c)
+        for s in testdata
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = argmax(y.data, 1)
+            println(y)
+            println(s.t.data)
+            throw("")
             append!(preds, y)
-            append!(golds, t.data)
+            append!(golds, s.t.data)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 
@@ -129,7 +143,7 @@ function initvocab(path::String)
     worddict, chardict, tagdict
 end
 
-function decode(dec::Decoder, path::String)
+function decode2(dec::Decoder, path::String)
     data = readdata(path, dec.worddict1, dec.worddict2, dec.chardict, dec.tagdict)
     data = batch(data, 100)
     id2tag = Array{String}(length(dec.tagdict))
@@ -154,7 +168,7 @@ function decode(dec::Decoder, path::String)
 end
 
 function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict, tagdict::Dict)
-    data = Tuple[]
+    samples = Sample[]
     words, tags = String[], String[]
     unkword1 = worddict1["UNKNOWN"]
     unkword2 = worddict2["UNKNOWN"]
@@ -166,29 +180,28 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
         line = lines[i]
         if isempty(line)
             isempty(words) && continue
-            w1 = Int[]
-            w2 = Int[]
-            cs = Vector{Int}[]
+            wordids1 = Int[]
+            wordids2 = Int[]
+            charids = Int[]
+            batchdims_c = Int[]
             for w in words
                 w0 = replace(lowercase(w), r"[0-9]", '0')
                 id = get(worddict1, w0, unkword1)
-                push!(w1, id)
+                push!(wordids1, id)
                 id = get(worddict2, w0, unkword2)
-                push!(w2, id)
+                push!(wordids2, id)
 
                 chars = Vector{Char}(w)
-                charids = map(chars) do c
+                ids = map(chars) do c
                     get(chardict, string(c), unkchar)
                 end
-                push!(cs, charids)
+                append!(charids, ids)
+                push!(batchdims_c, length(ids))
             end
-
-            if isempty(tags)
-                push!(data, (w1,w2,c))
-            else
-                t = map(t -> tagdict[t], tags)
-                push!(data, (w1,w2,c,t))
-            end
+            batchdims_w = [length(words)]
+            w1, w2, c = Var(wordids1), Var(wordids2), Var(charids)
+            t = isempty(tags) ? nothing : Var(map(t -> tagdict[t], tags))
+            push!(samples, Sample(w1,w2,c,batchdims_w,batchdims_c,t))
             empty!(words)
             empty!(tags)
         else
@@ -202,7 +215,7 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
             end
         end
     end
-    Array{typeof(data[1])}(data)
+    samples
 end
 
 function fscore(golds::Vector{T}, preds::Vector{T}) where T
