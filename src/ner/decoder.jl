@@ -14,7 +14,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     wordembeds1 = Var(h5read(embedsfile,"vectors"))
     #wordembeds1 = [zerograd(wordembeds1[:,i]) for i=1:size(wordembeds1,2)]
     worddict2, chardict, tagdict = initvocab(trainfile)
-    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Zeros())
+    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Fill(0))
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
     traindata = readdata(trainfile, worddict1, worddict2, chardict, tagdict)
     testdata = readdata(testfile, worddict1, worddict2, chardict, tagdict)
@@ -149,32 +149,27 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
         line = lines[i]
         if isempty(line)
             isempty(words) && continue
-            wordids1 = Int[]
-            wordids2 = Int[]
-            charbatchdims = Int[]
-            charids = Int[]
+            w1 = Int[]
+            w2 = Int[]
+            cs = Vector{Int}[]
             for w in words
                 w0 = replace(lowercase(w), r"[0-9]", '0')
                 id = get(worddict1, w0, unkword1)
-                push!(wordids1, id)
+                push!(w1, id)
                 id = get(worddict2, w0, unkword2)
-                push!(wordids2, id)
+                push!(w2, id)
 
                 chars = Vector{Char}(w)
-                push!(charbatchdims, length(chars))
-                for c in chars
-                    push!(charids, get(chardict,string(c),unkchar))
+                charids = map(chars) do c
+                    get(chardict, string(c), unkchar)
                 end
+                push!(cs, charids)
             end
-            w1 = Var(wordids1)
-            w2 = Var(wordids2)
-            c = Var(charids, charbatchdims)
 
             if isempty(tags)
                 push!(data, (w1,w2,c))
             else
-                tagids = map(t -> tagdict[t], tags)
-                t = Var(tagids)
+                t = map(t -> tagdict[t], tags)
                 push!(data, (w1,w2,c,t))
             end
             empty!(words)
