@@ -34,7 +34,8 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     NN(g)
 end
 
-function (nn::NN)(w1::Var, w2::Var, c::Vector{Vector{Var}}, t=nothing)
+function (nn::NN)(w1::Vector{Vector{Int}}, w2::Vector{Vector{Int}}, c::Vector{Vector{Vector{Int}}}, t=nothing)
+    
     batchdims = mao(length, c)
     batchdims_c = Int[]
     for x in c

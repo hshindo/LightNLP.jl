@@ -8,6 +8,23 @@ mutable struct Decoder
     nn
 end
 
+function batch(w1::Vector{Int}, w2::Vector{Int}, batchsize::Int)
+    batches = Var[]
+    for i = 1:batchsize:length(data)
+        T = eltype(data[i])
+        N = ndims(data[i])
+        batch = T[]
+        batchdims = Int[]
+        for k = i:min(i+batchsize-1,length(data))
+            append!(batch, data[k].data)
+            append!(batchdims, data[k].batchdims)
+        end
+        batch = reshape(batch, Base.front(size(data[i]))..., sum(batchdims))
+        push!(batches, Var(batch,batchdims))
+    end
+    batches
+end
+
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
     words1 = h5read(embedsfile, "words")
     worddict1 = Dict(words1[i] => i for i=1:length(words1))
