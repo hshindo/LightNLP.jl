@@ -34,12 +34,12 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
 end
 
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words1 = h5read(embedsfile, "words")
+    words1 = h5read(embedsfile, "key")
     worddict1 = Dict(words1[i] => i for i=1:length(words1))
-    wordembeds1 = Var(h5read(embedsfile,"vectors"))
+    wordembeds1 = Var(h5read(embedsfile,"value"))
     #wordembeds1 = [zerograd(wordembeds1[:,i]) for i=1:size(wordembeds1,2)]
     worddict2, chardict, tagdict = initvocab(trainfile)
-    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Fill(0))
+    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Uniform(-0.01,0.01))
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
     traindata = readdata(trainfile, worddict1, worddict2, chardict, tagdict)
     testdata = readdata(testfile, worddict1, worddict2, chardict, tagdict)
@@ -82,9 +82,6 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         for s in testdata
             y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
             y = argmax(y.data, 1)
-            println(y)
-            println(s.t.data)
-            throw("")
             append!(preds, y)
             append!(golds, s.t.data)
         end
