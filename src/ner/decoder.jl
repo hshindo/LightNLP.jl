@@ -39,7 +39,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     wordembeds1 = Var(h5read(embedsfile,"vectors"))
     #wordembeds1 = [zerograd(wordembeds1[:,i]) for i=1:size(wordembeds1,2)]
     worddict2, chardict, tagdict = initvocab(trainfile)
-    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Uniform(-0.01,0.01))
+    wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Fill(0))
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
     traindata = readdata(trainfile, worddict1, worddict2, chardict, tagdict)
     testdata = readdata(testfile, worddict1, worddict2, chardict, tagdict)
@@ -65,7 +65,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
             y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
@@ -80,7 +80,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
             y = argmax(y.data, 1)
             append!(preds, y)
             append!(golds, s.t.data)
