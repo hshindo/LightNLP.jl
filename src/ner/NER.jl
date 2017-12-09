@@ -33,7 +33,7 @@ end
 end
 
 #include("bioes.jl")
-include("nn.jl")
+include("nn_lstm.jl")
 include("decoder.jl")
 
 end

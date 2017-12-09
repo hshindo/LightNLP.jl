@@ -65,7 +65,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
@@ -80,7 +80,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = argmax(y.data, 1)
             append!(preds, y)
             append!(golds, s.t.data)
