@@ -20,12 +20,12 @@ function NN(wordembeds1::Var, wordembeds2::Vector{Var}, charembeds::Vector{Var},
     h = Conv1D(T,5,d,dh,2,1)(h,batchdims_w)
     h = relu(h)
 
-    istrain = Node("train")
-    for i = 1:3
-        h = dropout(h, 0.3, istrain)
-        h = Conv1D(T,5,dh,dh,2,1)(h,batchdims_w)
-        h = relu(h)
-    end
+    #istrain = Node("train")
+    #for i = 1:3
+    #    h = dropout(h, 0.3, istrain)
+    #    h = Conv1D(T,5,dh,dh,2,1)(h,batchdims_w)
+    #    h = relu(h)
+    #end
     h = Linear(T,dh,ntags)(h)
     g = Graph(h)
     NN(g)

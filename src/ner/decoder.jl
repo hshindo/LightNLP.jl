@@ -34,9 +34,9 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
 end
 
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words1 = h5read(embedsfile, "key")
+    words1 = h5read(embedsfile, "words")
     worddict1 = Dict(words1[i] => i for i=1:length(words1))
-    wordembeds1 = Var(h5read(embedsfile,"value"))
+    wordembeds1 = Var(h5read(embedsfile,"vectors"))
     #wordembeds1 = [zerograd(wordembeds1[:,i]) for i=1:size(wordembeds1,2)]
     worddict2, chardict, tagdict = initvocab(trainfile)
     wordembeds2 = embeddings(Float32, length(worddict2), 100, init_w=Uniform(-0.01,0.01))
@@ -65,7 +65,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
@@ -80,7 +80,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = nn.g("w1"=>s.w1, "w2"=>s.w2, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = argmax(y.data, 1)
             append!(preds, y)
             append!(golds, s.t.data)
@@ -183,7 +183,7 @@ function readdata(path::String, worddict1::Dict, worddict2::Dict, chardict::Dict
             batchdims_c = Int[]
             for w in words
                 w0 = replace(lowercase(w), r"[0-9]", '0')
-                id = get(worddict1, w0, unkword1)
+                id = get(worddict1, lowercase(w), unkword1)
                 push!(wordids1, id)
                 id = get(worddict2, w0, unkword2)
                 push!(wordids2, id)
