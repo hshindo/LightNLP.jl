@@ -20,10 +20,7 @@ function NN(wordembeds::Vector{Var}, charembeds::Vector{Var}, ntags::Int)
     d = 100 + 5size(charembeds[1],1)
     h = BiLSTM(T,d,d)(h,batchdims_w)
     h = dropout(h, 0.5, istrain)
-
-    #h = dropout(h, 0.3, istrain)
-    #h = BiLSTM(T,2d,d)(h,batchdims_w)
-    #h = relu(h)
+    
     h = Linear(T,2d,ntags)(h)
     g = Graph(h)
     NN(g)
