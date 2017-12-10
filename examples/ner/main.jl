@@ -9,7 +9,7 @@ if training
     trainfile = ".data/eng.train.BIOES"
     testfile = ".data/eng.testb.BIOES"
     nepochs = 50
-    learnrate = 0.001
+    learnrate = 0.005
     batchsize = 10
     ner = NER.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
     save("ner.jld2", "ner", ner)

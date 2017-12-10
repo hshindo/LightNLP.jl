@@ -1,17 +1,13 @@
-export decode
-
 mutable struct Decoder
     worddict::Dict
-    chardict::Dict
-    tagdict::Dict
+    posdict::Dict
     nn
 end
 
 struct Sample
     w::Var
-    c::Var
-    batchdims_w
-    batchdims_c
+    p::Var
+    batchdims::Var
     t::Var
 end
 
@@ -21,11 +17,10 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
         range = i:min(i+batchsize-1,length(samples))
         s = samples[range]
         w = Var(cat(1, map(x -> x.w.data, s)...))
-        c = Var(cat(1, map(x -> x.c.data, s)...))
-        batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
-        batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
+        p = Var(cat(1, map(x -> x.p.data, s)...))
+        batchdims = cat(1, map(x -> x.batchdims, s)...)
         t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
-        push!(batches, Sample(w,c,batchdims_w,batchdims_c,t))
+        push!(batches, Sample(w,p,batchdims,t))
     end
     batches
 end
@@ -61,7 +56,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
+            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
@@ -76,7 +71,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w)
             y = argmax(y.data, 1)
             append!(preds, y)
             append!(golds, s.t.data)
@@ -122,33 +117,10 @@ function initvocab(path::String)
     chardict, tagdict
 end
 
-function decode2(dec::Decoder, path::String)
-    data = readdata(path, dec.worddict1, dec.worddict2, dec.chardict, dec.tagdict)
-    data = batch(data, 100)
-    id2tag = Array{String}(length(dec.tagdict))
-    for (k,v) in dec.tagdict
-        id2tag[v] = k
-    end
-
-    preds = Int[]
-    for x in data
-        y = dec.nn(x[1], x[2], x[3])
-        append!(preds, y)
-    end
-
-    lines = open(readlines, path)
-    i = 1
-    for line in lines
-        isempty(line) && continue
-        tag = id2tag[preds[i]]
-        println("$line\t$tag")
-        i += 1
-    end
-end
-
-function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
+function readconll(path::String, worddict::Dict, posdict::Dict)
     samples = Sample[]
-    words, tags = String[], String[]
+    words = String[]
+    heads = Int[]
     unkword = worddict["UNKNOWN"]
     unkchar = chardict["UNKNOWN"]
 
@@ -162,8 +134,8 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             charids = Int[]
             batchdims_c = Int[]
             for w in words
-                #w0 = replace(lowercase(w), r"[0-9]", '0')
-                id = get(worddict, lowercase(w), unkword)
+                w0 = replace(lowercase(w), r"[0-9]", '0')
+                id = get(worddict, w0, unkword)
                 push!(wordids, id)
 
                 chars = Vector{Char}(w)
@@ -175,19 +147,21 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             end
             batchdims_w = [length(words)]
             w, c = Var(wordids), Var(charids)
-            t = isempty(tags) ? nothing : Var(map(t -> tagdict[t], tags))
             push!(samples, Sample(w,c,batchdims_w,batchdims_c,t))
             empty!(words)
-            empty!(tags)
+            empty!(heads)
         else
             items = Vector{String}(split(line,"\t"))
-            word = strip(items[1])
+            word = strip(items[2])
             @assert !isempty(word)
             push!(words, word)
             if length(items) >= 2
                 tag = strip(items[2])
                 push!(tags, tag)
             end
+            ppos = strip(items[6])
+            head = parse(Int, items[9])
+            push!(heads, head)
         end
     end
     samples

@@ -2,18 +2,14 @@ struct NN
     g
 end
 
-function NN(wordembeds::Vector{Var}, charembeds::Vector{Var}, ntags::Int)
+function NN(wordembeds::Vector{Var}, posembeds::Vector{Var})
     T = Float32
     w = lookup(wordembeds, Node("w"))
-    batchdims_c = Node("batchdims_c")
-    c = lookup(charembeds, Node("c"))
-    d = size(charembeds[1], 1)
-    c = Conv1D(T,5,d,5d,2,1)(c,batchdims_c)
-    c = max_batch(c, batchdims_c)
+    p = lookup(posembeds, Node("p"))
 
-    h = cat(1, w, c)
+    h = cat(1, w1, w2, c)
     batchdims_w = Node("batchdims_w")
-    d = 100 + 5size(charembeds[1],1)
+    d = 200 + 5size(charembeds[1],1)
     dh = 300
     h = Conv1D(T,5,d,dh,2,1)(h,batchdims_w)
     h = leaky_relu(h)
