@@ -4,6 +4,12 @@ using JLD2, FileIO
 
 training = true
 
+#=
+For lstm model,
+* learnrate = 0.005
+* batchsize = 10
+=#
+
 if training
     embedsfile = ".data/glove.6B.100d.h5"
     trainfile = ".data/eng.train.BIOES"
