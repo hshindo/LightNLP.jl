@@ -4,23 +4,21 @@ end
 
 function NN(wordembeds::Vector{Var}, posembeds::Vector{Var})
     T = Float32
+    istrain = Node("train")
     w = lookup(wordembeds, Node("w"))
     p = lookup(posembeds, Node("p"))
 
-    h = cat(1, w1, w2, c)
+    h = cat(1, w, p)
+    h = dropout(h, 0.33, istrain)
+    #d = 100 + 5size(posembeds[1],1)
+    d = 150
     batchdims_w = Node("batchdims_w")
-    d = 200 + 5size(charembeds[1],1)
-    dh = 300
-    h = Conv1D(T,5,d,dh,2,1)(h,batchdims_w)
-    h = leaky_relu(h)
+    h = BiLSTM(T,d,d)(h,batchdims_w)
+    h = dropout(h, 0.33, istrain)
 
-    istrain = Node("train")
-    for i = 1:2
-        h = dropout(h, 0.3, istrain)
-        h = Conv1D(T,5,dh,dh,2,1)(h,batchdims_w)
-        h = leaky_relu(h)
-    end
-    h = Linear(T,dh,ntags)(h)
-    g = Graph(h)
-    NN(g)
+    hdep = Linear(T,2d,300)(h)
+    hhead = Linear(T,2d,300)(h)
+    h = Linear(T,300,300)(hdep)
+    h = BLAS.gemm('T', 'N', 1, hhead, h)
+    NN(Graph(h))
 end
