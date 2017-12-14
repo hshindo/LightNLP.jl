@@ -13,6 +13,7 @@ For lstm model,
 if training
     embedsfile = ".data/glove.6B.100d.h5"
     trainfile = ".data/eng.train.BIOES"
+    devfile = ".data/eng.testa.BIOES"
     testfile = ".data/eng.testb.BIOES"
     nepochs = 50
     learnrate = 0.005

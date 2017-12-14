@@ -10,8 +10,8 @@ end
 struct Sample
     w::Var
     c::Var
-    batchdims_w
-    batchdims_c
+    batchdims_w::Var
+    batchdims_c::Var
     t::Var
 end
 
@@ -22,8 +22,8 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
         s = samples[range]
         w = Var(cat(1, map(x -> x.w.data, s)...))
         c = Var(cat(1, map(x -> x.c.data, s)...))
-        batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
-        batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
+        batchdims_w = Var(cat(1, map(x -> x.batchdims_w.data, s)...))
+        batchdims_c = Var(cat(1, map(x -> x.batchdims_c.data, s)...))
         t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
         push!(batches, Sample(w,c,batchdims_w,batchdims_c,t))
     end
@@ -36,7 +36,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     w = h5read(embedsfile, "vectors")
     wordembeds = [zerograd(w[:,i]) for i=1:size(w,2)]
     chardict, tagdict = initvocab(trainfile)
-    charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
+    charembeds = embeddings(Float32, length(chardict), 20, init_W=Normal(0,0.01))
     traindata = readdata(trainfile, worddict, chardict, tagdict)
     testdata = readdata(testfile, worddict, chardict, tagdict)
     nn = NN(wordembeds, charembeds, length(tagdict))
@@ -61,7 +61,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
+            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>Var(true))
             y = softmax_crossentropy(s.t, y)
             loss += sum(y.data)
             params = gradient!(y)
@@ -76,7 +76,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>Var(false))
             y = argmax(y.data, 1)
             append!(preds, y)
             append!(golds, s.t.data)
@@ -173,8 +173,9 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                 append!(charids, ids)
                 push!(batchdims_c, length(ids))
             end
-            batchdims_w = [length(words)]
+            batchdims_w = Var([length(words)])
             w, c = Var(wordids), Var(charids)
+            batchdims_c = Var(batchdims_c)
             t = isempty(tags) ? nothing : Var(map(t -> tagdict[t], tags))
             push!(samples, Sample(w,c,batchdims_w,batchdims_c,t))
             empty!(words)
