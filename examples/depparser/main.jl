@@ -10,7 +10,7 @@ if training
     testfile = ".data/CoNLL2009-ST-evaluation-English.txt"
     nepochs = 50
     learnrate = 0.001
-    batchsize = 1
+    batchsize = 25
     ner = DepParser.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
     save("ner.jld2", "ner", ner)
 else

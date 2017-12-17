@@ -10,7 +10,7 @@ struct Sample
     batchdims_w
     batchdims_c
     pos::Var
-    head::Var
+    head
 end
 
 function create_batch(samples::Vector{Sample}, batchsize::Int)
@@ -23,7 +23,7 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
         batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
         batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
         pos = Var(cat(1, map(x -> x.pos.data, s)...))
-        head = Var(cat(1, map(x -> x.head.data, s)...))
+        head = map(x -> x.head, s)
         #t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
         push!(batches, Sample(word,char,batchdims_w,batchdims_c,pos,head))
     end
@@ -40,14 +40,14 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     posdict = Dict{String,Int}()
     traindata = readconll(trainfile, worddict, chardict, posdict)[1:10000]
     testdata = readconll(testfile, worddict, chardict, posdict)
-    posembeds = embeddings(Float32, length(posdict), 50, init_w=Normal(0,0.01))
+    posembeds = embeddings(Float32, length(posdict), 50)
     nn = NN(wordembeds, posembeds)
 
     info("#Training examples:\t$(length(traindata))")
     info("#Testing examples:\t$(length(testdata))")
-    info("#Words1:\t$(length(worddict))")
+    info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
-    info("#Tags:\t$(length(posdict))")
+    info("#POS-tags:\t$(length(posdict))")
     testdata = create_batch(testdata, 100)
 
     opt = SGD()
@@ -61,16 +61,22 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         batches = create_batch(traindata, batchsize)
         prog = Progress(length(batches))
         loss = 0.0
+        losscount = 0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w"=>s.word, "p"=>s.pos, "batchdims_w"=>s.batchdims_w, "train"=>true)
-            y = softmax_crossentropy(s.head, y)
-            loss += sum(y.data)
-            params = gradient!(y)
+            os = nn(s.word, s.pos, s.batchdims_w, true)
+            ys = Var[]
+            for (h,o) in zip(s.head,os)
+                y = softmax_crossentropy(h, o)
+                push!(ys, y)
+                loss += sum(y.data)
+                losscount += length(y.data)
+            end
+            params = gradient!(ys...)
             foreach(opt, params)
             ProgressMeter.next!(prog)
         end
-        loss /= length(batches)
+        loss /= losscount
         println("Loss:\t$loss")
 
         # test
@@ -78,19 +84,23 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w"=>s.word, "p"=>s.pos, "batchdims_w"=>s.batchdims_w, "train"=>false)
-            y = argmax(y.data, 1)
-            append!(preds, y)
-            append!(golds, s.t.data)
+            os = nn(s.word, s.pos, s.batchdims_w, false)
+            for (h,o) in zip(s.head,os)
+                y = argmax(o, 1)
+                append!(preds, y)
+                append!(golds, h.data)
+            end
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
-
-        preds = BIOES.decode(preds, tagdict)
-        golds = BIOES.decode(golds, tagdict)
-        fscore(golds, preds)
+        count = 0
+        for k = 1:length(preds)
+            preds[k] == golds[k] && (count += 1)
+        end
+        acc = round(count/length(preds), 5)
+        println("Acc:\t$acc")
         println()
     end
-    Decoder(worddict, chardict, tagdict, nn)
+    Decoder(worddict, posdict, nn)
 end
 
 function initvocab(path::String)
@@ -177,15 +187,4 @@ function readconll(path::String, worddict::Dict, chardict::Dict, posdict::Dict)
         end
     end
     samples
-end
-
-function fscore(golds::Vector{T}, preds::Vector{T}) where T
-    set = intersect(Set(golds), Set(preds))
-    count = length(set)
-    prec = round(count/length(preds), 5)
-    recall = round(count/length(golds), 5)
-    fval = round(2*recall*prec/(recall+prec), 5)
-    println("Prec:\t$prec")
-    println("Recall:\t$recall")
-    println("Fscore:\t$fval")
 end
