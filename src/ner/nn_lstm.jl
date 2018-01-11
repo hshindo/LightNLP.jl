@@ -1,4 +1,13 @@
 struct NN
+end
+
+function NN(wordembeds::Var, charembeds::Var)
+    T = Float32
+    
+end
+
+#=
+struct NN
     g
 end
 
@@ -25,3 +34,4 @@ function NN(wordembeds::Vector{Var}, charembeds::Vector{Var}, ntags::Int)
     g = Graph(h)
     NN(g)
 end
+=#
