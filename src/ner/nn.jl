@@ -1,40 +1,49 @@
-mutable struct NN
-    embeds_w
-    embeds_c
-    conv_c
-    conv_hs
-    out
+struct NN
+    g
 end
 
-function NN(embeds_w::Var, embeds_c::Var, ntags::Int)
-    T = Float32
-    hsize = 300
-    conv_c = Conv(T, 5,d,5d,2,1)
-    conv_h = Conv(T)
-    conv_hs = [Conv(T) for i=1:2]
-    out = Linear(T, hsize, ntags)
-    NN(embeds_w, embeds_c, conv_c, conv_hs, out)
-end
+function NN(embeds_w::Matrix{T}, embeds_c::Matrix{T}, ntags::Int) where T
+    w = Node()
+    hw = lookup(zerograd(embeds_w), w)
 
-function (nn::NN)(w, c, y=nothing)
-    w = nn.embeds_w(w)
-    c = nn.embeds_c(c)
-    c = nn.conv_c(c)
-    c = maximum_batch(c)
+    c = Node()
+    hc = lookup(zerograd(embeds_c), c)
+    d = size(embeds_c, 1)
+    hc = Conv(T,(d,5,1,5d),pads=2)(hc)
+    hc = transpose(hc)
+    hc = reshape(hc, size(hc,1), size(hc,3))
+    hc = maximum_batch(hc, batchdims_c)
 
-    h = concat(1, w, c)
+    h = cat(1, hw, hc)
+
+
+    c = Conv1D(T,5,d,5d,2,1)(c,batchdims_c)
+
+    w = lookup(wordembeds, Node("w"))
+    batchdims_c = Node("batchdims_c")
+    c = lookup(charembeds, Node("c"))
+    d = size(charembeds[1], 1)
+    c = Conv1D(T,5,d,5d,2,1)(c,batchdims_c)
+    c = max_batch(c, batchdims_c)
+
+    h = cat(1, w, c)
+    batchdims_w = Node("batchdims_w")
     d = 100 + 5size(charembeds[1],1)
     dh = 300
-    h = nn.conv_h(h,batchdims_w)
-    h = relu(h)
+    h = Conv1D(T,5,d,dh,2,1)(h,batchdims_w)
+    h = leaky_relu(h)
+
+    istrain = Node("train")
     for i = 1:2
-        h = dropout(h, y == nothing ? 0.0 : 0.3)
-        h = nn.conv_hs[i](h)
-        h = relu(h)
+        h = dropout(h, 0.3, istrain)
+        h = Conv1D(T,5,dh,dh,2,1)(h,batchdims_w)
+        h = leaky_relu(h)
     end
-    h = nn.linear_out(h)
-    h
+    h = Linear(T,dh,ntags)(h)
+    g = Graph(h)
+    NN(g)
 end
+
 
 struct NN
     g
