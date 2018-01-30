@@ -3,18 +3,18 @@ struct NN
 end
 
 function NN(embeds_w::Matrix{T}, embeds_c::Matrix{T}, ntags::Int) where T
-    w = Node()
-    hw = lookup(zerograd(embeds_w), w)
+    batchdims_w = Node(name="batchdims_w")
+    batchdims_c = Node(name="batchdims_c")
+    w = lookup(zerograd(embeds_w), Node(name="w"))
+    c = lookup(zerograd(embeds_c), Node(name="c"))
 
-    c = Node()
-    hc = lookup(zerograd(embeds_c), c)
     d = size(embeds_c, 1)
-    hc = Conv(T,(d,5,1,5d),pads=2)(hc)
-    hc = transpose(hc)
-    hc = reshape(hc, size(hc,1), size(hc,3))
-    hc = maximum_batch(hc, batchdims_c)
+    c = Conv(T,(d,5,1,5d),pads=2)(c)
+    c = transpose(c)
+    c = reshape(c, size(c,1), size(c,3))
+    c = max_batch(c, batchdims_c)
 
-    h = cat(1, hw, hc)
+    h = cat(1, w, c)
 
 
     c = Conv1D(T,5,d,5d,2,1)(c,batchdims_c)
