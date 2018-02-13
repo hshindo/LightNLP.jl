@@ -1,9 +1,15 @@
 struct NN
 end
 
-function NN(wordembeds::Var, charembeds::Var)
-    T = Float32
-    
+function NN(wordembeds::Matrix{T}, charembeds::Matrix{T}) where T
+    w = lookup(Node(zerograd(wordembeds)), Node(name="w"))
+
+    batchdims_c = Node(name="batchdims_c")
+    c = lookup(Node(zerograd(charembeds)), Node(name="c"))
+    c = dropout(c, 0.5)
+    d = size(charembeds[1], 1)
+    c = Conv(T,d,5,1,d,pads=2)(c,batchdims_c)
+    c = max_batch(c, batchdims_c)
 end
 
 #=
