@@ -26,13 +26,6 @@ function NN(embeds_w::Matrix{T}, embeds_c::Matrix{T}, ntags::Int) where T
     Graph(h)
 end
 
-function train(nn::NN, x::Sample)
-    Merlin.CONFIG.train = true
-    z = nn(x.batchdims_c, x.batchdims_w, Var(x.c), Var(x.w))
-    z = softmax_crossentropy(Var(x.t), z)
-    z
-end
-
 function (nn::NN)(x::Sample, train::Bool)
     Merlin.CONFIG.train = train
     z = nn(x.batchdims_c, x.batchdims_w, Var(x.c), Var(x.w))

@@ -1,9 +1,9 @@
-embedsfile = ".data/glove.6B.100d.h5"
-trainfile = ".data/eng.train.BIOES"
-devfile = ".data/eng.testa.BIOES"
-testfile = ".data/eng.testb.BIOES"
+const WORDVEC_FILE = ".data/glove.6B.100d.h5"
+const TRAIN_FILE = ".data/eng.train.BIOES"
+const DEV_FILE = ".data/eng.testa.BIOES"
+const TEST_FILE = ".data/eng.testb.BIOES"
 
-training = true
-learnrate = 0.005
-batchsize = 10
-nepochs = 50
+const NEPOCHS = 50
+const LEARNING_RATE = 0.005
+const BATCHSIZE = 10
+const TRAINING = true

@@ -4,7 +4,7 @@ using LightNLP.NER
 
 include(ARGS[1])
 
-if training
+if TRAINING
     ner = NER.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
     #save("ner.jld2", "ner", ner)
 else
