@@ -8,11 +8,11 @@ mutable struct Decoder
 end
 
 struct Sample
-    w::Var
-    c::Var
+    w
     batchdims_w
+    c
     batchdims_c
-    t::Var
+    t
 end
 
 function create_batch(samples::Vector{Sample}, batchsize::Int)
@@ -20,12 +20,12 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     for i = 1:batchsize:length(samples)
         range = i:min(i+batchsize-1,length(samples))
         s = samples[range]
-        w = Var(cat(1, map(x -> x.w.data, s)...))
-        c = Var(cat(1, map(x -> x.c.data, s)...))
+        w = cat(2, map(x -> x.w, s)...)
+        c = cat(2, map(x -> x.c, s)...)
         batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
         batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
-        t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
-        push!(batches, Sample(w,c,batchdims_w,batchdims_c,t))
+        t = s[1].t == nothing ? nothing : cat(1, map(x -> x.t, s)...)
+        push!(batches, Sample(w,batchdims_w,c,batchdims_c,t))
     end
     batches
 end
@@ -33,13 +33,12 @@ end
 function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
     words = h5read(embedsfile, "words")
     worddict = Dict(words[i] => i for i=1:length(words))
-    w = h5read(embedsfile, "vectors")
-    wordembeds = [zerograd(w[:,i]) for i=1:size(w,2)]
+    wordembeds = h5read(embedsfile, "vectors")
     chardict, tagdict = initvocab(trainfile)
-    charembeds = embeddings(Float32, length(chardict), 20, init_W=Normal(0,0.01))
+    charembeds = Normal(0,0.01)(Float32, 20, length(chardict))
     traindata = readdata(trainfile, worddict, chardict, tagdict)
     testdata = readdata(testfile, worddict, chardict, tagdict)
-    nn = NN(wordembeds, charembeds, length(tagdict))
+    nn = setup_nn(wordembeds, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
     info("#Testing examples:\t$(length(testdata))")
@@ -55,14 +54,15 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         opt.rate = learnrate * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
+        Merlin.CONFIG.train = true
         shuffle!(traindata)
         batches = create_batch(traindata, batchsize)
         prog = Progress(length(batches))
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>true)
-            y = softmax_crossentropy(s.t, y)
+            y = nn(s.batchdims_c, s.batchdims_w, Var(s.c), Var(s.w))
+            y = softmax_crossentropy(Var(s.t), y)
             loss += sum(y.data)
             params = gradient!(y)
             foreach(opt, params)
@@ -73,13 +73,14 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
 
         # test
         println("Testing...")
+        Merlin.CONFIG.train = false
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn.g("w"=>s.w, "c"=>s.c, "batchdims_c"=>s.batchdims_c, "batchdims_w"=>s.batchdims_w, "train"=>false)
+            y = nn(s.batchdims_c, s.batchdims_w, Var(s.c), Var(s.w))
             y = argmax(y.data, 1)
             append!(preds, y)
-            append!(golds, s.t.data)
+            append!(golds, s.t)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 
@@ -174,9 +175,10 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                 push!(batchdims_c, length(ids))
             end
             batchdims_w = [length(words)]
-            w, c = Var(wordids), Var(charids)
-            t = isempty(tags) ? nothing : Var(map(t -> tagdict[t], tags))
-            push!(samples, Sample(w,c,batchdims_w,batchdims_c,t))
+            w = reshape(wordids, 1, length(wordids))
+            c = reshape(charids, 1, length(charids))
+            t = isempty(tags) ? nothing : map(t -> tagdict[t], tags)
+            push!(samples, Sample(w,batchdims_w,c,batchdims_c,t))
             empty!(words)
             empty!(tags)
         else
