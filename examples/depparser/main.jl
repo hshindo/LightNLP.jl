@@ -4,7 +4,7 @@ using JLD2, FileIO
 
 include(ARGS[1])
 
-if training
+if TRAINING
     parser = DepParser.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
     save("parser.jld2", "parser", parser)
 else

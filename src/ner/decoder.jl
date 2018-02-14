@@ -30,15 +30,15 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     batches
 end
 
-function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words = h5read(embedsfile, "words")
+function Decoder()
+    words = h5read(WORDVEC_FILE, "words")
     worddict = Dict(words[i] => i for i=1:length(words))
-    wordembeds = h5read(embedsfile, "vectors")
-    chardict, tagdict = initvocab(trainfile)
+    wordembeds = h5read(WORDVEC_FILE, "vectors")
+    chardict, tagdict = initvocab(TRAIN_FILE)
     charembeds = Normal(0,0.01)(Float32, 20, length(chardict))
-    traindata = readdata(trainfile, worddict, chardict, tagdict)
-    testdata = readdata(testfile, worddict, chardict, tagdict)
-    nn = setup_nn(wordembeds, charembeds, length(tagdict))
+    traindata = readdata(TRAIN_FILE, worddict, chardict, tagdict)
+    testdata = readdata(TEST_FILE, worddict, chardict, tagdict)
+    nn = NN(wordembeds, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
     info("#Testing examples:\t$(length(testdata))")
@@ -48,23 +48,21 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     testdata = create_batch(testdata, 100)
 
     opt = SGD()
-    for epoch = 1:nepochs
+    for epoch = 1:NEPOCHS
         println("Epoch:\t$epoch")
-        #opt.rate = learnrate / batchsize
-        opt.rate = learnrate * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        #opt.rate = LEARN_RATE / BATCHSIZE
+        opt.rate = LEARN_RATE * BATCHSIZE / sqrt(BATCHSIZE) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
-        Merlin.CONFIG.train = true
         shuffle!(traindata)
-        batches = create_batch(traindata, batchsize)
+        batches = create_batch(traindata, BATCHSIZE)
         prog = Progress(length(batches))
         loss = 0.0
         for i in 1:length(batches)
             s = batches[i]
-            y = nn(s.batchdims_c, s.batchdims_w, Var(s.c), Var(s.w))
-            y = softmax_crossentropy(Var(s.t), y)
-            loss += sum(y.data)
-            params = gradient!(y)
+            z = nn(s, true)
+            loss += sum(z.data)
+            params = gradient!(z)
             foreach(opt, params)
             ProgressMeter.next!(prog)
         end
@@ -73,13 +71,11 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
 
         # test
         println("Testing...")
-        Merlin.CONFIG.train = false
         preds = Int[]
         golds = Int[]
         for s in testdata
-            y = nn(s.batchdims_c, s.batchdims_w, Var(s.c), Var(s.w))
-            y = argmax(y.data, 1)
-            append!(preds, y)
+            z = nn(s, false)
+            append!(preds, z)
             append!(golds, s.t)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
@@ -121,30 +117,6 @@ function initvocab(path::String)
     chardict["UNKNOWN"] = length(chardict) + 1
 
     chardict, tagdict
-end
-
-function decode2(dec::Decoder, path::String)
-    data = readdata(path, dec.worddict1, dec.worddict2, dec.chardict, dec.tagdict)
-    data = batch(data, 100)
-    id2tag = Array{String}(length(dec.tagdict))
-    for (k,v) in dec.tagdict
-        id2tag[v] = k
-    end
-
-    preds = Int[]
-    for x in data
-        y = dec.nn(x[1], x[2], x[3])
-        append!(preds, y)
-    end
-
-    lines = open(readlines, path)
-    i = 1
-    for line in lines
-        isempty(line) && continue
-        tag = id2tag[preds[i]]
-        println("$line\t$tag")
-        i += 1
-    end
 end
 
 function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
