@@ -30,14 +30,15 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     batches
 end
 
-function Decoder()
-    words = h5read(WORDVEC_FILE, "words")
+function Decoder(config::Dict)
+    words = h5read(config["wordvec_file"], "words")
+    wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
-    wordembeds = h5read(WORDVEC_FILE, "vectors")
-    chardict, tagdict = initvocab(TRAIN_FILE)
+
+    chardict, tagdict = initvocab(config["train_file"])
     charembeds = Normal(0,0.01)(Float32, 20, length(chardict))
-    traindata = readdata(TRAIN_FILE, worddict, chardict, tagdict)
-    testdata = readdata(TEST_FILE, worddict, chardict, tagdict)
+    traindata = readdata(config["train_file"], worddict, chardict, tagdict)
+    testdata = readdata(config["test_file"], worddict, chardict, tagdict)
     nn = NN(wordembeds, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
@@ -48,14 +49,15 @@ function Decoder()
     testdata = create_batch(testdata, 100)
 
     opt = SGD()
-    for epoch = 1:NEPOCHS
+    batchsize = config["batchsize"]
+    for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         #opt.rate = LEARN_RATE / BATCHSIZE
-        opt.rate = LEARN_RATE * BATCHSIZE / sqrt(BATCHSIZE) / (1 + 0.05*(epoch-1))
+        opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
         shuffle!(traindata)
-        batches = create_batch(traindata, BATCHSIZE)
+        batches = create_batch(traindata, batchsize)
         prog = Progress(length(batches))
         loss = 0.0
         for i in 1:length(batches)
