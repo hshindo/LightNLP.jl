@@ -34,7 +34,6 @@ function Decoder(config::Dict)
     words = h5read(config["wordvec_file"], "words")
     wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
-
     chardict, tagdict = initvocab(config["train_file"])
     charembeds = Normal(0,0.01)(Float32, 20, length(chardict))
     traindata = readdata(config["train_file"], worddict, chardict, tagdict)
@@ -107,6 +106,7 @@ function initvocab(path::String)
                 chardict[c] = 1
             end
         end
+
         tag = strip(items[2])
         haskey(tagdict,tag) || (tagdict[tag] = length(tagdict)+1)
     end
