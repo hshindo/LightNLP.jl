@@ -18,11 +18,11 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     for i = 1:batchsize:length(samples)
         range = i:min(i+batchsize-1,length(samples))
         s = samples[range]
-        word = Var(cat(1, map(x -> x.word.data, s)...))
-        char = Var(cat(1, map(x -> x.char.data, s)...))
+        word = Var(cat(2, map(x -> x.word.data, s)...))
+        char = Var(cat(2, map(x -> x.char.data, s)...))
         batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
         batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
-        pos = Var(cat(1, map(x -> x.pos.data, s)...))
+        pos = Var(cat(2, map(x -> x.pos.data, s)...))
         head = map(x -> x.head, s)
         #t = s[1].t == nothing ? nothing : Var(cat(1, map(x -> x.t.data, s)...))
         push!(batches, Sample(word,char,batchdims_w,batchdims_c,pos,head))
@@ -30,17 +30,15 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     batches
 end
 
-function Decoder(embedsfile::String, trainfile::String, testfile::String, nepochs::Int, learnrate::Float64, batchsize::Int)
-    words = h5read(embedsfile, "words")
+function Decoder(config::Dict)
+    chardict = Dict("UNKNOWN" => 1)
+    words = h5read(config["wordvec_file"], "words")
+    wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
-    w = h5read(embedsfile, "vectors")
-    wordembeds = [zerograd(w[:,i]) for i=1:size(w,2)]
-    chardict = initvocab(trainfile)
-    #charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.01))
     posdict = Dict{String,Int}()
-    traindata = readconll(trainfile, worddict, chardict, posdict)[1:10000]
-    testdata = readconll(testfile, worddict, chardict, posdict)
-    posembeds = embeddings(Float32, length(posdict), 50)
+    traindata = readconll(config["train_file"], worddict, chardict, posdict)[1:10000]
+    testdata = readconll(config["test_file"], worddict, chardict, posdict)
+    posembeds = Uniform(-0.01,0.01)(Float32, 50, length(posdict))
     nn = NN(wordembeds, posembeds)
 
     info("#Training examples:\t$(length(traindata))")
@@ -51,10 +49,11 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
     testdata = create_batch(testdata, 100)
 
     opt = SGD()
-    for epoch = 1:nepochs
+    batchsize = config["batchsize"]
+    for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         #opt.rate = learnrate / batchsize
-        opt.rate = learnrate * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        opt.rate = config["learning_rate"] / batchsize * sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
         shuffle!(traindata)
@@ -86,7 +85,7 @@ function Decoder(embedsfile::String, trainfile::String, testfile::String, nepoch
         for s in testdata
             os = nn(s.word, s.pos, s.batchdims_w, false)
             for (h,o) in zip(s.head,os)
-                y = argmax(o, 1)
+                y = argmax(o.data, 1)
                 append!(preds, y)
                 append!(golds, h.data)
             end
@@ -169,9 +168,9 @@ function readconll(path::String, worddict::Dict, chardict::Dict, posdict::Dict)
                 push!(posids, id)
             end
 
-            w = Var(wordids)
-            c = Var(charids)
-            p = Var(posids)
+            w = Var(reshape(wordids,1,length(wordids)))
+            c = Var(reshape(charids,1,length(charids)))
+            p = Var(reshape(posids,1,length(posids)))
             h = Var(heads)
             push!(samples, Sample(w,c,batchdims_w,batchdims_c,p,h))
             empty!(words)

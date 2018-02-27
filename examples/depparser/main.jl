@@ -1,12 +1,12 @@
 using LightNLP
 using LightNLP.DepParser
-using JLD2, FileIO
+# using JLD2, FileIO
 
-include(ARGS[1])
+include("config.jl")
 
-if TRAINING
-    parser = DepParser.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
-    save("parser.jld2", "parser", parser)
+if CONFIG["training"]
+    parser = DepParser.Decoder(CONFIG)
+    # save("parser.jld2", "parser", parser)
 else
     parser = load("parser.jld2", "parser")
     decode(parser, testfile)

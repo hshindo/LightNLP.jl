@@ -1,8 +1,8 @@
-const WORDVEC_FILE = ".data/word2vec.NYT.100d.h5"
-const TRAIN_FILE = ".data/CoNLL2009-ST-English-train.txt"
-const TEST_FILE = ".data/CoNLL2009-ST-evaluation-English.txt"
-
-const NEPOCHS = 50
-const LEARNING_RATE = 0.001
-const BATCHSIZE = 25
-const TRAINING = true
+CONFIG = Dict()
+CONFIG["wordvec_file"] = ".data/word2vec.NYT.100d.h5"
+CONFIG["train_file"] = ".data/CoNLL2009-ST-English-train.txt"
+CONFIG["test_file"] = ".data/CoNLL2009-ST-evaluation-English.txt"
+CONFIG["nepochs"] = 50
+CONFIG["learning_rate"] = 0.01
+CONFIG["batchsize"] = 25
+CONFIG["training"] = true
