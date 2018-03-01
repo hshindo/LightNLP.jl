@@ -8,20 +8,20 @@ function NN(wordembeds::Matrix{T}, posembeds::Matrix{T}) where T
     p = lookup(Node(zerograd(posembeds)), Node(name="p"))
 
     h = concat(1, w, p)
-    h = dropout(h, 0.33)
+    #h = dropout(h, 0.33)
     d = 300
     batchdims_w = Node(name="batchdims_w")
     h = LSTM(T,150,d,1,0.0,true)(h,batchdims_w)
-    h = dropout(h, 0.33)
+    # h = dropout(h, 0.33)
     g1 = BACKEND(Graph(h))
 
     h = Node(name="h")
     hdep = Linear(T, 2d, 300, init_w=OrthoNormal())(h)
     hdep = relu(hdep)
-    hdep = dropout(hdep, 0.33)
+    #hdep = dropout(hdep, 0.33)
     hhead = Linear(T, 2d, 300, init_w=OrthoNormal())(h)
     hhead = relu(hhead)
-    hhead = dropout(hhead, 0.33)
+    #hhead = dropout(hhead, 0.33)
 
     h = Linear(T,300,300)(hdep)
     h = BLAS.gemm('T', 'N', 1, hhead, h)
