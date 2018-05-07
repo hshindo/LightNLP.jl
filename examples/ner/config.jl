@@ -1,4 +1,4 @@
-CONFIG = Dict()
+const CONFIG = Dict()
 CONFIG["wordvec_file"] = ".data/glove.6B.100d.h5"
 CONFIG["train_file"] = ".data/eng.train.BIOES"
 CONFIG["dev_file"] = ".data/eng.testa.BIOES"

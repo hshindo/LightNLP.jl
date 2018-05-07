@@ -6,6 +6,6 @@ using HDF5
 
 include("BIOES.jl")
 include("decoder.jl")
-include("nn_lstm.jl")
+include("model.jl")
 
 end

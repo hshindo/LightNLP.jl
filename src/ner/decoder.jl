@@ -7,15 +7,7 @@ mutable struct Decoder
     nn
 end
 
-struct Sample
-    w
-    batchdims_w
-    c
-    batchdims_c
-    t
-end
-
-function create_batch(samples::Vector{Sample}, batchsize::Int)
+function create_batch2(samples::Vector{Sample}, batchsize::Int)
     batches = Sample[]
     for i = 1:batchsize:length(samples)
         range = i:min(i+batchsize-1,length(samples))
@@ -30,29 +22,33 @@ function create_batch(samples::Vector{Sample}, batchsize::Int)
     batches
 end
 
-function Decoder(config::Dict)
-    words = h5read(config["wordvec_file"], "words")
-    wordembeds = h5read(config["wordvec_file"], "vectors")
+function Decoder()
+    words = h5read(CONFIG["wordvec_file"], "words")
     worddict = Dict(words[i] => i for i=1:length(words))
-    chardict, tagdict = initvocab(config["train_file"])
-    charembeds = Normal(0,0.01)(Float32, 20, length(chardict))
-    traindata = readdata(config["train_file"], worddict, chardict, tagdict)
-    testdata = readdata(config["test_file"], worddict, chardict, tagdict)
+    wordembeds = h5read(CONFIG["wordvec_file"], "vectors")
+
+    chardict, tagdict = initvocab(CONFIG["train_file"])
+    charembeds = Normal(0,0.01)(eltype(wordembeds), 20, length(chardict))
+
+    traindata = readdata(CONFIG["train_file"], worddict, chardict, tagdict)
+    testdata = readdata(CONFIG["test_file"], worddict, chardict, tagdict)
     nn = NN(wordembeds, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
     info("#Testing examples:\t$(length(testdata))")
-    info("#Words1:\t$(length(worddict))")
+    info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
     testdata = create_batch(testdata, 100)
+end
 
+function train!(dec::Decoder)
     opt = SGD()
-    batchsize = config["batchsize"]
-    for epoch = 1:config["nepochs"]
+    batchsize = CONFIG["batchsize"]
+    for epoch = 1:CONFIG["nepochs"]
         println("Epoch:\t$epoch")
         #opt.rate = LEARN_RATE / BATCHSIZE
-        opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        opt.rate = CONFIG["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
         shuffle!(traindata)
@@ -86,7 +82,6 @@ function Decoder(config::Dict)
         fscore(golds, preds)
         println()
     end
-    Decoder(worddict, chardict, tagdict, nn)
 end
 
 function initvocab(path::String)

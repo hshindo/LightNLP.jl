@@ -1,6 +1,4 @@
-module BIOES
-
-function decode(ids::Vector{Int}, tagdict::Dict{String,Int})
+function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
     id2tag = Array{String}(length(tagdict))
     for (k,v) in tagdict
         id2tag[v] = k
@@ -22,6 +20,4 @@ function decode(ids::Vector{Int}, tagdict::Dict{String,Int})
         end
     end
     spans
-end
-
 end
