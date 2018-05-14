@@ -5,7 +5,7 @@ using JLD2, FileIO
 include("config.jl")
 
 if CONFIG["training"]
-    ner = NER.Decoder()
+    ner = NER.Decoder(CONFIG)
     #save("ner.jld2", "ner", ner)
 else
     ner = load("ner.jld2", "ner")

@@ -5,33 +5,36 @@ mutable struct Decoder
     chardict::Dict
     tagdict::Dict
     nn
+    config
 end
 
-function create_batch2(samples::Vector{Sample}, batchsize::Int)
-    batches = Sample[]
-    for i = 1:batchsize:length(samples)
-        range = i:min(i+batchsize-1,length(samples))
-        s = samples[range]
-        w = cat(2, map(x -> x.w, s)...)
-        c = cat(2, map(x -> x.c, s)...)
-        batchdims_w = cat(1, map(x -> x.batchdims_w, s)...)
-        batchdims_c = cat(1, map(x -> x.batchdims_c, s)...)
-        t = s[1].t == nothing ? nothing : cat(1, map(x -> x.t, s)...)
-        push!(batches, Sample(w,batchdims_w,c,batchdims_c,t))
-    end
-    batches
+struct Sample
+    w
+    c
+    t
+    batchsize_w
+    batchsize_c
 end
 
-function Decoder()
-    words = h5read(CONFIG["wordvec_file"], "words")
+function Base.cat(xs::Vector{Sample})
+    w = cat(2, map(x -> x.w, xs)...)
+    c = cat(2, map(x -> x.c, xs)...)
+    t = cat(2, map(x -> x.t, xs)...)
+    batchsize_w = cat(1, map(x -> x.batchsize_w, xs)...)
+    batchsize_c = cat(1, map(x -> x.batchsize_c, xs)...)
+    Sample(w, c, t, batchsize_w, batchsize_c)
+end
+
+function Decoder(config::Dict)
+    words = h5read(config["wordvec_file"], "words")
     worddict = Dict(words[i] => i for i=1:length(words))
-    wordembeds = h5read(CONFIG["wordvec_file"], "vectors")
+    wordembeds = h5read(config["wordvec_file"], "vectors")
 
-    chardict, tagdict = initvocab(CONFIG["train_file"])
+    chardict, tagdict = initvocab(config["train_file"])
     charembeds = Normal(0,0.01)(eltype(wordembeds), 20, length(chardict))
 
-    traindata = readdata(CONFIG["train_file"], worddict, chardict, tagdict)
-    testdata = readdata(CONFIG["test_file"], worddict, chardict, tagdict)
+    traindata = readdata(config["train_file"], worddict, chardict, tagdict)
+    testdata = readdata(config["test_file"], worddict, chardict, tagdict)
     nn = NN(wordembeds, charembeds, length(tagdict))
 
     info("#Training examples:\t$(length(traindata))")
@@ -39,25 +42,28 @@ function Decoder()
     info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
-    testdata = create_batch(testdata, 100)
+    #testdata = create_batch(testdata, 100)
+    dec = Decoder(worddict, chardict, tagdict, nn, config)
+    train!(dec, traindata, testdata)
 end
 
-function train!(dec::Decoder)
+function train!(dec::Decoder, traindata, testdata)
+    config = dec.config
     opt = SGD()
-    batchsize = CONFIG["batchsize"]
-    for epoch = 1:CONFIG["nepochs"]
+    batchsize = config["batchsize"]
+    for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         #opt.rate = LEARN_RATE / BATCHSIZE
-        opt.rate = CONFIG["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
         shuffle!(traindata)
-        batches = create_batch(traindata, batchsize)
-        prog = Progress(length(batches))
+        samples = create_batch(cat, batchsize, traindata)
+        prog = Progress(length(samples))
         loss = 0.0
-        for i in 1:length(batches)
-            s = batches[i]
-            z = nn(s, true)
+        for s in samples
+            z = nn.g(s.batchsize_c, s.batchsize_w, s.c, s.w)
+            softmax_crossentropy(Var(x.t), z)
             loss += sum(z.data)
             params = gradient!(z)
             foreach(opt, params)
@@ -72,13 +78,14 @@ function train!(dec::Decoder)
         golds = Int[]
         for s in testdata
             z = nn(s, false)
+            argmax(z.data, 1)
             append!(preds, z)
             append!(golds, s.t)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 
-        preds = BIOES.decode(preds, tagdict)
-        golds = BIOES.decode(golds, tagdict)
+        preds = bioes_decode(preds, tagdict)
+        golds = bioes_decode(golds, tagdict)
         fscore(golds, preds)
         println()
     end
@@ -118,7 +125,8 @@ end
 
 function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
     samples = Sample[]
-    words, tags = String[], String[]
+    words = String[]
+    tagids = Int[]
     unkword = worddict["UNKNOWN"]
     unkchar = chardict["UNKNOWN"]
 
@@ -130,9 +138,9 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             isempty(words) && continue
             wordids = Int[]
             charids = Int[]
-            batchdims_c = Int[]
+            batchsize_c = Int[]
             for w in words
-                #w0 = replace(lowercase(w), r"[0-9]", '0')
+                # w0 = replace(lowercase(w), r"[0-9]", '0')
                 id = get(worddict, lowercase(w), unkword)
                 push!(wordids, id)
 
@@ -141,15 +149,15 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                     get(chardict, string(c), unkchar)
                 end
                 append!(charids, ids)
-                push!(batchdims_c, length(ids))
+                push!(batchsize_c, length(ids))
             end
-            batchdims_w = [length(words)]
+            batchsize_w = [length(words)]
             w = reshape(wordids, 1, length(wordids))
             c = reshape(charids, 1, length(charids))
-            t = isempty(tags) ? nothing : map(t -> tagdict[t], tags)
-            push!(samples, Sample(w,batchdims_w,c,batchdims_c,t))
+            t = reshape(copy(tagids), 1, length(tagids))
+            push!(samples, Sample(w,c,t,batchsize_w,batchsize_c))
             empty!(words)
-            empty!(tags)
+            empty!(tagids)
         else
             items = Vector{String}(split(line,"\t"))
             word = strip(items[1])
@@ -157,7 +165,9 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             push!(words, word)
             if length(items) >= 2
                 tag = strip(items[2])
-                push!(tags, tag)
+                push!(tagids, tagdict[tag])
+            else
+                push!(tagids, 0)
             end
         end
     end
@@ -173,4 +183,28 @@ function fscore(golds::Vector{T}, preds::Vector{T}) where T
     println("Prec:\t$prec")
     println("Recall:\t$recall")
     println("Fscore:\t$fval")
+end
+
+function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
+    id2tag = Array{String}(length(tagdict))
+    for (k,v) in tagdict
+        id2tag[v] = k
+    end
+
+    spans = Tuple{Int,Int,String}[]
+    bpos = 0
+    for i = 1:length(ids)
+        tag = id2tag[ids[i]]
+        tag == "O" && continue
+        startswith(tag,"B") && (bpos = i)
+        startswith(tag,"S") && (bpos = i)
+        nexttag = i == length(ids) ? "O" : id2tag[ids[i+1]]
+        if (startswith(tag,"S") || startswith(tag,"E")) && bpos > 0
+            tag = id2tag[ids[bpos]]
+            basetag = length(tag) > 2 ? tag[3:end] : ""
+            push!(spans, (bpos,i,basetag))
+            bpos = 0
+        end
+    end
+    spans
 end
