@@ -12,17 +12,16 @@ struct Sample
     w
     c
     t
-    batchsize_w
-    batchsize_c
 end
 
 function Base.cat(xs::Vector{Sample})
-    w = cat(2, map(x -> x.w, xs)...)
-    c = cat(2, map(x -> x.c, xs)...)
-    t = cat(2, map(x -> x.t, xs)...)
-    batchsize_w = cat(1, map(x -> x.batchsize_w, xs)...)
-    batchsize_c = cat(1, map(x -> x.batchsize_c, xs)...)
-    Sample(w, c, t, batchsize_w, batchsize_c)
+    w = map(x -> x.w, xs)
+    c = Vector{Int}[]
+    for x in xs
+        append!(c, x.c)
+    end
+    t = map(x -> x.t, xs)
+    Sample(w, c, t)
 end
 
 function Decoder(config::Dict)
@@ -42,9 +41,10 @@ function Decoder(config::Dict)
     info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
-    #testdata = create_batch(testdata, 100)
+    # testdata = create_batch(testdata, 100)
     dec = Decoder(worddict, chardict, tagdict, nn, config)
     train!(dec, traindata, testdata)
+    dec
 end
 
 function train!(dec::Decoder, traindata, testdata)
@@ -137,8 +137,7 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
         if isempty(line)
             isempty(words) && continue
             wordids = Int[]
-            charids = Int[]
-            batchsize_c = Int[]
+            charids = Vector{Int}[]
             for w in words
                 # w0 = replace(lowercase(w), r"[0-9]", '0')
                 id = get(worddict, lowercase(w), unkword)
@@ -148,14 +147,12 @@ function readdata(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                 ids = map(chars) do c
                     get(chardict, string(c), unkchar)
                 end
-                append!(charids, ids)
-                push!(batchsize_c, length(ids))
+                push!(charids, ids)
             end
-            batchsize_w = [length(words)]
             w = reshape(wordids, 1, length(wordids))
             c = reshape(charids, 1, length(charids))
             t = reshape(copy(tagids), 1, length(tagids))
-            push!(samples, Sample(w,c,t,batchsize_w,batchsize_c))
+            push!(samples, Sample(w,c,t))
             empty!(words)
             empty!(tagids)
         else
