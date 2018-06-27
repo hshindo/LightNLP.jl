@@ -129,10 +129,13 @@ function decode(dec::Decoder, path::String)
     lines = open(readlines, path)
     i = 1
     for line in lines
-        isempty(line) && continue
-        tag = id2tag[preds[i]]
-        println("$line\t$tag")
-        i += 1
+        if isempty(line)
+            println("")
+        else
+            tag = id2tag[preds[i]]
+            println("$line\t$tag")
+            i += 1
+        end
     end
 end
 
