@@ -6,7 +6,7 @@ include("config.jl")
 
 if CONFIG["training"]
     ner = NER.Decoder(CONFIG)
-    #save("ner.jld2", "ner", ner)
+    save("ner.jld2", "ner", ner)
 else
     ner = load("ner.jld2", "ner")
     decode(ner, testfile)
