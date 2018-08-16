@@ -8,22 +8,6 @@ mutable struct Decoder
     config
 end
 
-struct Sample
-    w
-    c
-    t
-end
-
-function Base.cat(xs::Vector{Sample})
-    w = map(x -> x.w, xs)
-    c = Vector{Int}[]
-    for x in xs
-        append!(c, x.c)
-    end
-    t = map(x -> x.t, xs)
-    Sample(w, c, t)
-end
-
 function Decoder(config::Dict)
     words = h5read(config["wordvec_file"], "words")
     worddict = Dict(words[i] => i for i=1:length(words))
@@ -41,7 +25,7 @@ function Decoder(config::Dict)
     info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
-    # testdata = create_batch(testdata, 100)
+    testdata = create_batch(testdata, 100)
     dec = Decoder(worddict, chardict, tagdict, nn, config)
     train!(dec, traindata, testdata)
     dec

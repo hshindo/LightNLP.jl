@@ -1,3 +1,19 @@
+struct Sample
+    w
+    c
+    t
+end
+
+function Base.cat(xs::Vector{Sample})
+    w = map(x -> x.w, xs)
+    c = Vector{Int}[]
+    for x in xs
+        append!(c, x.c)
+    end
+    t = map(x -> x.t, xs)
+    Sample(w, c, t)
+end
+
 function initvocab(path::String)
     chardict = Dict{String,Int}()
     tagdict = Dict{String,Int}()
