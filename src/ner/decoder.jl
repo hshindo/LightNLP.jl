@@ -25,7 +25,7 @@ function Decoder(config::Dict)
     info("#Words:\t$(length(worddict))")
     info("#Chars:\t$(length(chardict))")
     info("#Tags:\t$(length(tagdict))")
-    testdata = create_batch(testdata, 100)
+    testdata = create_batch(catsample, testdata, 100)
     dec = Decoder(worddict, chardict, tagdict, nn, config)
     train!(dec, traindata, testdata)
     dec
@@ -41,13 +41,14 @@ function train!(dec::Decoder, traindata, testdata)
         opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
+        Merlin.settrain(true)
         shuffle!(traindata)
-        samples = create_batch(cat, batchsize, traindata)
+        samples = create_batch(catsample, batchsize, traindata)
         prog = Progress(length(samples))
         loss = 0.0
-        for s in samples
-            z = nn.g(s.batchsize_c, s.batchsize_w, s.c, s.w)
-            softmax_crossentropy(Var(x.t), z)
+        for (x,t) in samples
+            z = nn.g(x...)
+            z = softmax_crossentropy(t, z)
             loss += sum(z.data)
             params = gradient!(z)
             foreach(opt, params)
@@ -58,13 +59,14 @@ function train!(dec::Decoder, traindata, testdata)
 
         # test
         println("Testing...")
+        Merlin.settrain(false)
         preds = Int[]
         golds = Int[]
-        for s in testdata
-            z = nn(s, false)
-            argmax(z.data, 1)
+        for (x,t) in testdata
+            z = nn.g(x...)
+            z = argmax(z.data, 1)
             append!(preds, z)
-            append!(golds, s.t)
+            append!(golds, t)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 

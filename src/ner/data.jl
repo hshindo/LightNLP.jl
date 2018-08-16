@@ -1,17 +1,23 @@
-struct Sample
-    w
-    c
-    t
-end
-
-function Base.cat(xs::Vector{Sample})
-    w = map(x -> x.w, xs)
-    c = Vector{Int}[]
-    for x in xs
-        append!(c, x.c)
+function catsample(samples::Vector)
+    samples = sort(sample, by=s->length(s[1]), rev=true)
+    batchdims_w = Int[]
+    batchdims_c = Int[]
+    w = Int[]
+    c = Int[]
+    t = Int[]
+    for (_w,_cs,_t) in samples
+        push!(batchdims_w, length(_w))
+        append!(w, _w)
+        for _c in _cs
+            push!(batchdims_c, length(_c))
+            append!(c, _c)
+        end
+        append!(t, _t)
     end
-    t = map(x -> x.t, xs)
-    Sample(w, c, t)
+    w = Var(reshape(w,1,length(w)))
+    c = Var(reshape(c,1,length(c)))
+    t = Var(t)
+    (batchdims_c,batchdims_w,c,w), t
 end
 
 function initvocab(path::String)
@@ -47,7 +53,7 @@ function initvocab(path::String)
 end
 
 function readconll(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
-    samples = Sample[]
+    samples = []
     words = String[]
     tagids = Int[]
     unkword = worddict["UNKNOWN"]
@@ -72,12 +78,9 @@ function readconll(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                 end
                 push!(charids, ids)
             end
-            w = reshape(wordids, 1, length(wordids))
-            c = reshape(charids, 1, length(charids))
-            t = reshape(copy(tagids), 1, length(tagids))
-            push!(samples, Sample(w,c,t))
-            empty!(words)
-            empty!(tagids)
+            push!(samples, (wordids,charids,tagids))
+            words = String[]
+            tagids = Int[]
         else
             items = Vector{String}(split(line,"\t"))
             word = strip(items[1])
@@ -87,7 +90,7 @@ function readconll(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
                 tag = strip(items[2])
                 push!(tagids, tagdict[tag])
             else
-                push!(tagids, 0)
+                throw("")
             end
         end
     end
