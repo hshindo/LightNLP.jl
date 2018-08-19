@@ -5,10 +5,12 @@ end
 function NN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
     batchdims_w = Node(name="batchdims_w")
     batchdims_c = Node(name="batchdims_c")
+    w = Node(name="w")
+    c = Node(name="c")
 
-    w = lookup(param(wordembeds), Node(name="w"))
+    w = lookup(param(wordembeds), w)
 
-    c = lookup(param(charembeds), Node(name="c"))
+    c = lookup(param(charembeds), c)
     csize = size(charembeds, 1)
     c = Conv1d(T,5,csize,5csize,padding=2)(c, batchdims_c)
     c = max(c, batchdims_c)

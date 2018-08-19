@@ -19,7 +19,7 @@ function NN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
     h = concat(1, w, c)
     h = dropout(h, 0.5)
     hsize = size(wordembeds,1) + 5csize
-    h = LSTM(T,hsize,hsize,1,0.0,true)(h, batchdims_w)
+    h = Conv1d(T,5,hsize,2hsize,padding=2)(h, batchdims_w)
     h = dropout(h, 0.5)
     h = Linear(T,2hsize,ntags)(h)
     NN(Graph(h))

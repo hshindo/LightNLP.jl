@@ -46,11 +46,11 @@ function Decoder(config::Dict)
     posembeds = Uniform(-0.01,0.01)(Float32, 50, length(posdict))
     nn = NN(wordembeds, posembeds)
 
-    info("#Training examples:\t$(length(traindata))")
-    info("#Testing examples:\t$(length(testdata))")
-    info("#Words:\t$(length(worddict))")
-    info("#Chars:\t$(length(chardict))")
-    info("#POS-tags:\t$(length(posdict))")
+    @info "#Training examples:\t$(length(traindata))"
+    @info "#Testing examples:\t$(length(testdata))"
+    @info "#Words:\t$(length(worddict))"
+    @info "#Chars:\t$(length(chardict))"
+    @info "#POS-tags:\t$(length(posdict))"
     testdata = create_batch(testdata, 100)
 
     opt = SGD()

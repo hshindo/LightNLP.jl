@@ -1,5 +1,7 @@
 export decode
 
+using Random
+
 mutable struct Decoder
     worddict::Dict
     chardict::Dict
@@ -20,12 +22,12 @@ function Decoder(config::Dict)
     testdata = readconll(config["test_file"], worddict, chardict, tagdict)
     nn = NN(wordembeds, charembeds, length(tagdict))
 
-    info("#Training examples:\t$(length(traindata))")
-    info("#Testing examples:\t$(length(testdata))")
-    info("#Words:\t$(length(worddict))")
-    info("#Chars:\t$(length(chardict))")
-    info("#Tags:\t$(length(tagdict))")
-    testdata = create_batch(catsample, testdata, 100)
+    @info "#Training examples:\t$(length(traindata))"
+    @info "#Testing examples:\t$(length(testdata))"
+    @info "#Words:\t$(length(worddict))"
+    @info "#Chars:\t$(length(chardict))"
+    @info "#Tags:\t$(length(tagdict))"
+    testdata = create_batch(x -> catsample(x), 100, testdata)
     dec = Decoder(worddict, chardict, tagdict, nn, config)
     train!(dec, traindata, testdata)
     dec
@@ -42,19 +44,19 @@ function train!(dec::Decoder, traindata, testdata)
         println("Learning rate: $(opt.rate)")
 
         Merlin.settrain(true)
-        shuffle!(traindata)
-        samples = create_batch(catsample, batchsize, traindata)
+        Random.shuffle!(traindata)
+        samples = create_batch(x -> catsample(x), batchsize, traindata)
         prog = Progress(length(samples))
         loss = 0.0
         for (x,t) in samples
-            z = nn.g(x...)
+            z = dec.nn.g(x...)
             z = softmax_crossentropy(t, z)
             loss += sum(z.data)
             params = gradient!(z)
             foreach(opt, params)
             ProgressMeter.next!(prog)
         end
-        loss /= length(batches)
+        loss /= length(samples)
         println("Loss:\t$loss")
 
         # test
@@ -63,15 +65,15 @@ function train!(dec::Decoder, traindata, testdata)
         preds = Int[]
         golds = Int[]
         for (x,t) in testdata
-            z = nn.g(x...)
-            z = argmax(z.data, 1)
+            z = dec.nn.g(x...)
+            z = map(a -> a[1], argmax(z.data,dims=1))
             append!(preds, z)
-            append!(golds, t)
+            append!(golds, t.data)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
 
-        preds = bioes_decode(preds, tagdict)
-        golds = bioes_decode(golds, tagdict)
+        preds = bioes_decode(preds, dec.tagdict)
+        golds = bioes_decode(golds, dec.tagdict)
         fscore(golds, preds)
         println()
     end
@@ -80,16 +82,16 @@ end
 function fscore(golds::Vector{T}, preds::Vector{T}) where T
     set = intersect(Set(golds), Set(preds))
     count = length(set)
-    prec = round(count/length(preds), 5)
-    recall = round(count/length(golds), 5)
-    fval = round(2*recall*prec/(recall+prec), 5)
+    prec = round(count/length(preds), digits=5)
+    recall = round(count/length(golds), digits=5)
+    fval = round(2*recall*prec/(recall+prec), digits=5)
     println("Prec:\t$prec")
     println("Recall:\t$recall")
     println("Fscore:\t$fval")
 end
 
 function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
-    id2tag = Array{String}(length(tagdict))
+    id2tag = Array{String}(undef, length(tagdict))
     for (k,v) in tagdict
         id2tag[v] = k
     end

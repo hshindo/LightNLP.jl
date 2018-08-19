@@ -1,5 +1,5 @@
 function catsample(samples::Vector)
-    samples = sort(sample, by=s->length(s[1]), rev=true)
+    samples = sort(samples, by=s->length(s[1]), rev=true)
     batchdims_w = Int[]
     batchdims_c = Int[]
     w = Int[]
