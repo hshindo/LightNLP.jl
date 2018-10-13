@@ -27,13 +27,14 @@ function Decoder(config::Dict)
     @info "#Words:\t$(length(worddict))"
     @info "#Chars:\t$(length(chardict))"
     @info "#Tags:\t$(length(tagdict))"
-    testdata = create_batch(x -> catsample(x), 100, testdata)
+    testdata = create_batch(testdata, 100)
     dec = Decoder(worddict, chardict, tagdict, nn, config)
     train!(dec, traindata, testdata)
     dec
 end
 
 function train!(dec::Decoder, traindata, testdata)
+    return
     config = dec.config
     opt = SGD()
     batchsize = config["batchsize"]

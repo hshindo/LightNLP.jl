@@ -1,6 +1,0 @@
-julia 1.0
-HDF5
-ProgressMeter
-Merlin
-JLD2
-FileIO
