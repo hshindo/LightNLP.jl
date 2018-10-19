@@ -45,19 +45,24 @@ function train!(ner::NER, traindata, testdata)
         opt.rate = config.learning_rate * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
-        loss = fit!(nn, traindata, opt, batchsize=batchsize, shuffle=false) do (nn,data)
+        loss = fit!(nn, traindata, opt, batchsize=batchsize, shuffle=true) do (nn,data)
             z = nn(data)[1]
             y = data.t
             softmax_crossentropy(y, z)
         end
         println("Loss:\t$loss")
-        continue
 
         # test
         res = evaluate(nn, testdata, batchsize=100) do (nn,data)
-            z = nn(data)[1]
-            z = vec(map(a -> a[1], argmax(z.data,dims=1)))
             y = data.t.data
+            z = nn(data)[1]
+            maxind = vec(argmax(z.data,dims=1))
+            if Merlin.oncpu()
+                z = maxind(x -> x[1], maxind)
+            else
+                y = Array{Int}(Array(y))
+                z = Array{Int}(Array(maxind)) .+ 1
+            end
             (y, z)
         end
         golds = collect(Iterators.flatten(map(r -> r[1], res)))
