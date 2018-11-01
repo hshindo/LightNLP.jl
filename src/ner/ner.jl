@@ -8,7 +8,8 @@ mutable struct NER
     nn
 end
 
-function NER(config::NamedTuple)
+function NER(config::Dict)
+    config = namedtuple(config)
     words = h5read(config.wordvec_file, "words")
     wordembeds = h5read(config.wordvec_file, "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
@@ -33,19 +34,18 @@ end
 
 function train!(ner::NER, traindata, testdata)
     config = ner.config
-    Merlin.setdevice(config.device)
     opt = SGD()
     batchsize = config.batchsize
-    traindata = todevice(traindata)
-    testdata = todevice(testdata)
-    nn = todevice(ner.nn)
+    traindata = todevice(traindata, config.device)
+    testdata = todevice(testdata, config.device)
+    nn = todevice(ner.nn, config.device)
     for epoch = 1:config.nepochs
         println("Epoch:\t$epoch")
         #opt.rate = LEARN_RATE / BATCHSIZE
         opt.rate = config.learning_rate * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
-        loss = fit!(nn, traindata, opt, batchsize=batchsize, shuffle=true) do (nn,data)
+        loss = fit!(nn, traindata, opt, batchsize=batchsize, shuffle=true, device=config.device) do (nn,data)
             z = nn(data)[1]
             y = data.t
             softmax_crossentropy(y, z)
@@ -53,11 +53,11 @@ function train!(ner::NER, traindata, testdata)
         println("Loss:\t$loss")
 
         # test
-        res = evaluate(nn, testdata, batchsize=100) do (nn,data)
+        res = evaluate(nn, testdata, batchsize=100, device=config.device) do (nn,data)
             y = data.t.data
             z = nn(data)[1]
             maxind = vec(argmax(z.data,dims=1))
-            if Merlin.oncpu()
+            if config.device < 0
                 z = maxind(x -> x[1], maxind)
             else
                 y = Array{Int}(Array(y))

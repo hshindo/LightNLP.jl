@@ -4,13 +4,12 @@ end
 
 Base.length(conll::CoNLL) = length(conll.data)
 
-function Merlin.todevice(conll::CoNLL)
-    dev = Merlin.getdevice()
+function Merlin.todevice(conll::CoNLL, dev::Int)
     dev < 0 && return conll
     data = map(conll.data) do (w,c,dims_c,t)
-        w = todevice(w)
-        c = todevice(c)
-        t = todevice(t)
+        w = todevice(w, dev)
+        c = todevice(c, dev)
+        t = todevice(t, dev)
         (w, c, dims_c, t)
     end
     CoNLL(data)

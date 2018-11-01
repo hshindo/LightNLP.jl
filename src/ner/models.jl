@@ -1,9 +1,3 @@
-struct NN
-    g
-end
-
-Merlin.graphs(nn::NN) = (nn.g,)
-
 function model_lstm(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
     dims_w = Node(name=:dims_w)
     dims_c = Node(name=:dims_c)
@@ -90,6 +84,5 @@ function slstm_tstep(x::Var, dims)
         h = concat(1, h, x, g)
         h = linear(h, W, b)
         n = length(h) ÷ 7
-        h[1:6n] .*
     end
 end
