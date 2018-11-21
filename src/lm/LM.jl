@@ -1,7 +1,6 @@
-module NER
+module LM
 
 using Merlin
-using HDF5
 using ..LightNLP
 
 include("data.jl")

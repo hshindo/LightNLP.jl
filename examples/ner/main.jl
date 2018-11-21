@@ -1,20 +1,15 @@
 using LightNLP
 using LightNLP.NER
-using JLD2, FileIO
+using JSON
 
-training = true
+config = JSON.parsefile(ARGS[1])
 
-if training
-    embedsfile = ".data/glove.6B.100d.h5"
-    trainfile = ".data/eng.train.BIOES"
-    testfile = ".data/eng.testb.BIOES"
-    nepochs = 50
-    learnrate = 0.001
-    batchsize = 10
-    ner = NER.Decoder(embedsfile, trainfile, testfile, nepochs, learnrate, batchsize)
-    save("ner.jld2", "ner", ner)
+if config["training"]
+    ner = NER.Model(config)
+    #LightNLP.save("ner.jld2", ner)
 else
-    ner = load("ner.jld2", "ner")
+    ner = LightNLP.load("ner.jld2")
     testfile = ".data/eng.testb.BIOES"
-    decode(ner, testfile)
+    ner(testfile)
 end
+println("Finish.")

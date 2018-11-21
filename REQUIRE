@@ -1,4 +1,7 @@
-julia 0.6
-HDF5
+julia 1.0
+CodecZlib
 ProgressMeter
-Merlin
+FileIO
+HDF5
+JLD2
+JSON

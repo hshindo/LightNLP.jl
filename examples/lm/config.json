@@ -1,0 +1,10 @@
+{
+  "train_file": ".data/PTBLM/ptb.train.txt",
+  "test_file": ".data/PTBLM/ptb.test.txt",
+  "nepochs": 1000,
+  "learning_rate": 0.5,
+  "batchsize": 20,
+  "seqlength": 35,
+  "training": true,
+  "device": 0
+}

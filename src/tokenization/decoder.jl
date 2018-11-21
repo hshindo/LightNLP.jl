@@ -15,10 +15,10 @@ function Decoder(vocabfile::String, trainfile::String, testfile::String, nepochs
     charembeds = embeddings(Float32, length(chardict), 20, init_w=Normal(0,0.05))
     nn = NN(length(chardict), length(tagset.tag2id))
 
-    info("#Training examples:\t$(length(traindata))")
-    info("#Testing examples:\t$(length(testdata))")
-    info("#Chars:\t$(length(chardict))")
-    info("#Wordtags:\t$(length(tagset.tag2id))")
+    @info "#Training examples:\t$(length(traindata))"
+    @info "#Testing examples:\t$(length(testdata))"
+    @info "#Chars:\t$(length(chardict))"
+    @info "#Wordtags:\t$(length(tagset.tag2id))"
 
     opt = SGD()
     for epoch = 1:nepochs

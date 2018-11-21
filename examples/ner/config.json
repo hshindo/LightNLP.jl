@@ -1,0 +1,12 @@
+{
+  "wordvec_file": ".data/glove.6B.100d.h5",
+  "train_file": ".data/eng.train.BIOES",
+  "dev_file": ".data/eng.testa.BIOES",
+  "test_file": ".data/eng.testb.BIOES",
+  "nepochs": 30,
+  "learning_rate": 0.0015,
+  "batchsize": 10,
+  "training": true,
+  "nn": "lstm",
+  "device": 0
+}
