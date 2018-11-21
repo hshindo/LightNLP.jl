@@ -1,13 +1,15 @@
 using LightNLP
-using LightNLP.NERs
+using LightNLP.NER
 using JSON
-using JLD2, FileIO
 
 config = JSON.parsefile(ARGS[1])
+
 if config["training"]
-    ner = NER(config)
-    #save("ner.jld2", "ner", ner)
+    ner = NER.Model(config)
+    #LightNLP.save("ner.jld2", ner)
 else
-    ner = load("ner.jld2", "ner")
-    decode(ner, testfile)
+    ner = LightNLP.load("ner.jld2")
+    testfile = ".data/eng.testb.BIOES"
+    ner(testfile)
 end
+println("Finish.")

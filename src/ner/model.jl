@@ -1,83 +1,93 @@
-export decode
-
-using Random
-
-mutable struct Decoder
-    worddict::Dict
-    chardict::Dict
-    tagdict::Dict
-    nn
+mutable struct Model
     config
+    dicts
+    nn
 end
 
-function Decoder(config::Dict)
+function Model(config::Dict)
     words = h5read(config["wordvec_file"], "words")
-    worddict = Dict(words[i] => i for i=1:length(words))
     wordembeds = h5read(config["wordvec_file"], "vectors")
+    worddict = Dict(words[i] => i for i=1:length(words))
 
     chardict, tagdict = initvocab(config["train_file"])
     charembeds = Normal(0,0.01)(eltype(wordembeds), 20, length(chardict))
+    dicts = (w=worddict, c=chardict, t=tagdict)
 
-    traindata = readconll(config["train_file"], worddict, chardict, tagdict)
-    testdata = readconll(config["test_file"], worddict, chardict, tagdict)
-    nn = NN(wordembeds, charembeds, length(tagdict))
+    traindata = readconll(config["train_file"], dicts)
+    testdata = readconll(config["test_file"], dicts)
+
+    if config["nn"] == "cnn"
+        nn = nn_cnn(wordembeds, charembeds, length(tagdict))
+    elseif config["nn"] == "lstm"
+        nn = nn_lstm(wordembeds, charembeds, length(tagdict))
+    else
+        throw("Unknown nn")
+    end
 
     @info "#Training examples:\t$(length(traindata))"
     @info "#Testing examples:\t$(length(testdata))"
     @info "#Words:\t$(length(worddict))"
     @info "#Chars:\t$(length(chardict))"
     @info "#Tags:\t$(length(tagdict))"
-    testdata = create_batch(testdata, 100)
-    dec = Decoder(worddict, chardict, tagdict, nn, config)
-    train!(dec, traindata, testdata)
-    dec
+    m = Model(config, dicts, nn)
+    train!(m, traindata, testdata)
+    m
 end
 
-function train!(dec::Decoder, traindata, testdata)
-    return
-    config = dec.config
+function train!(model::Model, traindata, testdata)
+    config = model.config
+    device = config["device"]
+    nn = todevice(model.nn, device)
     opt = SGD()
+    params = parameters(nn)
     batchsize = config["batchsize"]
+    traindata = DataLoader(traindata, batchsize=batchsize, shuffle=true, device=device)
+    testdata = DataLoader(testdata, batchsize=100, shuffle=false, device=device)
+
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
-        #opt.rate = LEARN_RATE / BATCHSIZE
+        #opt.rate = config["learning_rate"]
         opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
-        Merlin.settrain(true)
-        Random.shuffle!(traindata)
-        samples = create_batch(x -> catsample(x), batchsize, traindata)
-        prog = Progress(length(samples))
         loss = 0.0
-        for (x,t) in samples
-            z = dec.nn.g(x...)
-            z = softmax_crossentropy(t, z)
-            loss += sum(z.data)
-            params = gradient!(z)
-            foreach(opt, params)
-            ProgressMeter.next!(prog)
+        Merlin.settrain(true)
+        foreach(traindata) do data
+            z = nn(data)[1]
+            y = data.t
+            l = softmax_crossentropy(y, z)
+            gradient!(l)
+            opt.(params)
+            loss += sum(Array(l.data))
         end
-        loss /= length(samples)
+        loss /= length(traindata)
         println("Loss:\t$loss")
 
         # test
-        println("Testing...")
         Merlin.settrain(false)
-        preds = Int[]
         golds = Int[]
-        for (x,t) in testdata
-            z = dec.nn.g(x...)
-            z = map(a -> a[1], argmax(z.data,dims=1))
+        preds = Int[]
+        foreach(testdata) do data
+            y = data.t.data
+            z = nn(data)[1]
+            if device < 0
+                ind = map(x -> x[1], argmax(z.data,dims=1))
+                z = vec(ind)
+            else
+                maxind = vec(argmax(z.data,dims=1))
+                y = Array{Int}(Array(y))
+                z = Array{Int}(Array(maxind)) .+ 1
+            end
+            append!(golds, y)
             append!(preds, z)
-            append!(golds, t.data)
         end
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
-
-        preds = bioes_decode(preds, dec.tagdict)
-        golds = bioes_decode(golds, dec.tagdict)
+        preds = bioes_decode(preds, model.dicts.t)
+        golds = bioes_decode(golds, model.dicts.t)
         fscore(golds, preds)
         println()
     end
+    model.nn = todevice(model.nn, -1)
 end
 
 function fscore(golds::Vector{T}, preds::Vector{T}) where T

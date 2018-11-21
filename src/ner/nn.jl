@@ -1,4 +1,4 @@
-function model_lstm(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
+function nn_lstm(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
     dims_w = Node(name=:dims_w)
     dims_c = Node(name=:dims_c)
 
@@ -17,25 +17,22 @@ function model_lstm(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) wh
     Graph(h)
 end
 
-function model_cnn(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
-    batchdims_w = Node(name="batchdims_w")
-    batchdims_c = Node(name="batchdims_c")
-    w = Node(name="w")
-    c = Node(name="c")
+function nn_cnn(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
+    dims_w = Node(name=:dims_w)
+    dims_c = Node(name=:dims_c)
 
-    w = lookup(param(wordembeds), w)
-
+    w = lookup(parameter(wordembeds), Node(name=:w))
+    c = lookup(parameter(charembeds), Node(name=:c))
     csize = size(charembeds, 1)
-    c = lookup(param(charembeds), c)
-    c = dropout(c, 0.5)
-    c = Conv1d(T,5,csize,5csize,padding=2)(c, batchdims_c)
-    c = max(c, batchdims_c)
+    #c = dropout(c, 0.5)
+    c = Conv1d(T,5,csize,5csize,padding=2)(c, dims_c)
+    c = max(c, dims_c)
 
     h = concat(1, w, c)
-    h = dropout(h, 0.5)
+    #h = dropout(h, 0.5)
     hsize = size(wordembeds,1) + 5csize
-    h = Conv1d(T,5,hsize,2hsize,padding=2)(h, batchdims_w)
-    h = dropout(h, 0.5)
+    h = Conv1d(T,5,hsize,2hsize,padding=2)(h, dims_w)
+    #h = dropout(h, 0.5)
     h = Linear(T,2hsize,ntags)(h)
     Graph(h)
 end

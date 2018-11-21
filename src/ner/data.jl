@@ -1,22 +1,22 @@
-struct CoNLL
+struct Data
     data::Vector
 end
 
-Base.length(conll::CoNLL) = length(conll.data)
+Base.length(data::Data) = length(data.data)
 
-function Merlin.todevice(conll::CoNLL, dev::Int)
-    dev < 0 && return conll
-    data = map(conll.data) do (w,c,dims_c,t)
+function Merlin.todevice(data::Data, dev::Int)
+    dev < 0 && return data
+    data = map(data.data) do (w,c,dims_c,t)
         w = todevice(w, dev)
         c = todevice(c, dev)
         t = todevice(t, dev)
         (w, c, dims_c, t)
     end
-    CoNLL(data)
+    Data(data)
 end
 
-function Base.getindex(conll::CoNLL, indexes::Vector{Int})
-    data = conll.data[indexes]
+function Base.getindex(data::Data, indexes::Vector{Int})
+    data = data.data[indexes]
     data = sort(data, by=x->length(x[1]), rev=true)
     ws = map(x -> x[1], data)
     dims_w = length.(ws)
@@ -29,12 +29,12 @@ function Base.getindex(conll::CoNLL, indexes::Vector{Int})
     (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t))
 end
 
-function CoNLL(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
+function readconll(path::String, dicts)
     data = []
     words = String[]
     tagids = Int[]
-    unkword = worddict["UNKNOWN"]
-    unkchar = chardict["UNKNOWN"]
+    unkword = dicts.w["UNKNOWN"]
+    unkchar = dicts.c["UNKNOWN"]
 
     lines = open(readlines, path)
     push!(lines, "")
@@ -47,13 +47,13 @@ function CoNLL(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             chardims = Int[]
             for w in words
                 # w0 = replace(lowercase(w), r"[0-9]", '0')
-                id = get(worddict, lowercase(w), unkword)
+                id = get(dicts.w, lowercase(w), unkword)
                 push!(wordids, id)
 
                 chars = Vector{Char}(w)
                 push!(chardims, length(chars))
                 cids = map(chars) do c
-                    get(chardict, string(c), unkchar)
+                    get(dicts.c, string(c), unkchar)
                 end
                 append!(charids, cids)
             end
@@ -67,14 +67,14 @@ function CoNLL(path::String, worddict::Dict, chardict::Dict, tagdict::Dict)
             push!(words, word)
             if length(items) >= 2
                 tag = strip(items[2])
-                push!(tagids, tagdict[tag])
+                push!(tagids, dicts.t[tag])
             else
                 throw("")
             end
         end
     end
     data = Vector{typeof(data[1])}(data)
-    CoNLL(data)
+    Data(data)
 end
 
 function initvocab(path::String)

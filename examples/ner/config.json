@@ -7,6 +7,6 @@
   "learning_rate": 0.0015,
   "batchsize": 10,
   "training": true,
-  "model": "lstm",
+  "nn": "lstm",
   "device": 0
 }
