@@ -3,7 +3,7 @@ module LM
 using Merlin
 using ..LightNLP
 
-include("data.jl")
+include("dataset.jl")
 include("model.jl")
 include("nn.jl")
 

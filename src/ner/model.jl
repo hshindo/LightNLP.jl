@@ -13,13 +13,13 @@ function Model(config::Dict)
     charembeds = Normal(0,0.01)(eltype(wordembeds), 20, length(chardict))
     dicts = (w=worddict, c=chardict, t=tagdict)
 
-    traindata = readconll(config["train_file"], dicts)
-    testdata = readconll(config["test_file"], dicts)
+    traindata = readconll(config["train_file"], dicts, true)
+    testdata = readconll(config["test_file"], dicts, false)
 
     if config["nn"] == "cnn"
-        nn = nn_cnn(wordembeds, charembeds, length(tagdict))
+        #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = nn_lstm(wordembeds, charembeds, length(tagdict))
+        nn = NN_LSTM(wordembeds, charembeds, length(tagdict))
     else
         throw("Unknown nn")
     end
@@ -37,12 +37,9 @@ end
 function train!(model::Model, traindata, testdata)
     config = model.config
     device = config["device"]
-    nn = todevice(model.nn, device)
     opt = SGD()
-    params = parameters(nn)
+    nn = todevice(model.nn, device)
     batchsize = config["batchsize"]
-    traindata = DataLoader(traindata, batchsize=batchsize, shuffle=true, device=device)
-    testdata = DataLoader(testdata, batchsize=100, shuffle=false, device=device)
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
@@ -50,44 +47,24 @@ function train!(model::Model, traindata, testdata)
         opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
-        loss = 0.0
-        Merlin.settrain(true)
-        foreach(traindata) do data
-            z = nn(data)[1]
-            y = data.t
-            l = softmax_crossentropy(y, z)
-            gradient!(l)
-            opt.(params)
-            loss += sum(Array(l.data))
-        end
+        loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true, device=device)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        # test
-        Merlin.settrain(false)
-        golds = Int[]
-        preds = Int[]
-        foreach(testdata) do data
-            y = data.t.data
-            z = nn(data)[1]
-            if device < 0
-                ind = map(x -> x[1], argmax(z.data,dims=1))
-                z = vec(ind)
-            else
-                maxind = vec(argmax(z.data,dims=1))
-                y = Array{Int}(Array(y))
-                z = Array{Int}(Array(maxind)) .+ 1
-            end
-            append!(golds, y)
-            append!(preds, z)
+        yz = evaluate(nn, testdata, batchsize=100, device=device)
+        golds, preds = Int[], Int[]
+        for (y,z) in yz
+            append!(golds, Array{Int}(y))
+            append!(preds, Array{Int}(z))
         end
+
         length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
         preds = bioes_decode(preds, model.dicts.t)
         golds = bioes_decode(golds, model.dicts.t)
         fscore(golds, preds)
         println()
     end
-    model.nn = todevice(model.nn, -1)
+    #model.nn = todevice(model.nn, -1)
 end
 
 function fscore(golds::Vector{T}, preds::Vector{T}) where T

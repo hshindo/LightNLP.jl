@@ -1,22 +1,22 @@
-struct Data
+struct Dataset
     data::Vector
+    training::Bool
 end
 
-Base.length(data::Data) = length(data.data)
+Base.length(dataset::Dataset) = length(dataset.data)
 
-function Merlin.todevice(data::Data, dev::Int)
-    dev < 0 && return data
-    data = map(data.data) do (w,c,dims_c,t)
+function Merlin.todevice(dataset::Dataset, dev::Int)
+    data = map(dataset.data) do (w,c,dims_c,t)
         w = todevice(w, dev)
         c = todevice(c, dev)
         t = todevice(t, dev)
         (w, c, dims_c, t)
     end
-    Data(data)
+    Dataset(data, dataset.training)
 end
 
-function Base.getindex(data::Data, indexes::Vector{Int})
-    data = data.data[indexes]
+function Base.getindex(dataset::Dataset, indexes::Vector{Int})
+    data = dataset.data[indexes]
     data = sort(data, by=x->length(x[1]), rev=true)
     ws = map(x -> x[1], data)
     dims_w = length.(ws)
@@ -26,10 +26,10 @@ function Base.getindex(data::Data, indexes::Vector{Int})
     c = reshape(c, 1, length(c))
     dims_c = cat(map(x -> x[3], data)..., dims=1)
     t = cat(map(x -> x[4], data)..., dims=1)
-    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t))
+    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), training=dataset.training)
 end
 
-function readconll(path::String, dicts)
+function readconll(path::String, dicts, training::Bool)
     data = []
     words = String[]
     tagids = Int[]
@@ -38,8 +38,7 @@ function readconll(path::String, dicts)
 
     lines = open(readlines, path)
     push!(lines, "")
-    for i = 1:length(lines)
-        line = lines[i]
+    for line in lines
         if isempty(line)
             isempty(words) && continue
             wordids = Int[]
@@ -74,7 +73,7 @@ function readconll(path::String, dicts)
         end
     end
     data = Vector{typeof(data[1])}(data)
-    Data(data)
+    Dataset(data, training)
 end
 
 function initvocab(path::String)

@@ -7,31 +7,26 @@ function nn_lstm(::Type{T}, vocab::Int) where T
     Graph(h)
 end
 
-mutable struct LM_LSTM <: Parametric
-    params
+mutable struct NN_LSTM <: Functor
+    wordembeds
+    lstm
+    linear
 end
 
-Merlin.parameters(f::LM_LSTM) = parameters(f.params...)
-Merlin.todevice(f::LM_LSTM, device) = LM_LSTM(todevice(f.params,device))
-
-function LM_LSTM(::Type{T}, vocab::Int) where T
-    wordembeds = Normal(0,0.01)(T, 100, vocab)
+function NN_LSTM(::Type{T}, vocab::Int) where T
+    wordembeds = parameter(Normal(0,0.01)(T,100,vocab))
     hsize = size(wordembeds, 1)
-    lstm = LSTM(T, hsize, hsize, 1, 0. 0, false)
+    lstm = LSTM(T, hsize, hsize, 1, 0.0, false)
     linear = Linear(T, hsize, size(wordembeds,2))
-    params = (wordembeds=wordembeds, lstm=lstm, linear=linear)
-    LM_LSTM(params)
+    NN_LSTM(wordembeds, lstm, linear)
 end
 
-function (nn::LM_LSTM)(nt::NamedTuple)
-    p = nn.params
-    h = lookup(p.wordembeds, nt.x)
-    h = p.lstm(h, nt.dims_x)
-    z = p.linear(h)
-    if t.train
-        l = softmax_crossentropy(nt.y, z)
-        gradient!(l)
-        sum(Array(l.data))
+function (nn::NN_LSTM)(x::NamedTuple)
+    h = lookup(nn.wordembeds, x.x)
+    h,hy,cy = nn.lstm(h, x.dims_x, x.training)
+    h = nn.linear(h)
+    if x.training
+        softmax_crossentropy(x.y, h)
     else
         throw("Not implemented yet.")
     end

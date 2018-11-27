@@ -4,8 +4,8 @@ using Merlin
 using HDF5
 using ..LightNLP
 
-include("data.jl")
+include("dataset.jl")
 include("model.jl")
-include("nn.jl")
+include("nn_lstm.jl")
 
 end
