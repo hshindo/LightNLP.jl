@@ -38,7 +38,8 @@ function readconll(path::String, dicts, training::Bool)
 
     lines = open(readlines, path)
     push!(lines, "")
-    for line in lines
+    for i = 1:length(lines)
+        line = lines[i]
         if isempty(line)
             isempty(words) && continue
             wordids = Int[]
@@ -56,13 +57,20 @@ function readconll(path::String, dicts, training::Bool)
                 end
                 append!(charids, cids)
             end
+
+            if maximum(chardims) > 20 || length(wordids) > 150
+                words = String[]
+                tagids = Int[]
+                continue
+            end
+
             push!(data, (wordids,charids,chardims,tagids))
             words = String[]
             tagids = Int[]
         else
             items = Vector{String}(split(line,"\t"))
             word = strip(items[1])
-            @assert !isempty(word)
+            isempty(word) && throw("line $i")
             push!(words, word)
             if length(items) >= 2
                 tag = strip(items[2])

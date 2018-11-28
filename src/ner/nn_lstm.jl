@@ -31,8 +31,8 @@ function (nn::NN_LSTM)(x::NamedTuple)
     if x.training
         softmax_crossentropy(x.t, h)
     else
-        y = Array(x.t.data)
-        z = Array(argmax(h.data,1))
+        y = Array{Int}(Array(x.t.data))
+        z = Array{Int}(Array(argmax(h.data,1)))
         vec(y), vec(z)
     end
 end

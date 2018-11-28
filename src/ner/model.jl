@@ -43,7 +43,6 @@ function train!(model::Model, traindata, testdata)
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
-        #opt.rate = config["learning_rate"]
         opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.rate)")
 
@@ -51,14 +50,12 @@ function train!(model::Model, traindata, testdata)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        yz = evaluate(nn, testdata, batchsize=100, device=device)
+        yz = evaluate(nn, testdata, batchsize=batchsize, device=device)
         golds, preds = Int[], Int[]
         for (y,z) in yz
-            append!(golds, Array{Int}(y))
-            append!(preds, Array{Int}(z))
+            append!(golds, y)
+            append!(preds, z)
         end
-
-        length(preds) == length(golds) || throw("Length mismatch: $(length(preds)), $(length(golds))")
         preds = bioes_decode(preds, model.dicts.t)
         golds = bioes_decode(golds, model.dicts.t)
         fscore(golds, preds)
