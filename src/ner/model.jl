@@ -19,7 +19,7 @@ function Model(config::Dict)
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_LSTM(wordembeds, charembeds, length(tagdict))
+        nn = NN_SLSTM(wordembeds, charembeds, length(tagdict))
     else
         throw("Unknown nn")
     end
@@ -37,20 +37,29 @@ end
 function train!(model::Model, traindata, testdata)
     config = model.config
     device = config["device"]
-    opt = SGD()
+    opt = ASGD(SGD())
     nn = todevice(model.nn, device)
+    params = parameters(nn)
     batchsize = config["batchsize"]
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
-        opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
-        println("Learning rate: $(opt.rate)")
+        epoch == 100 && (opt.on = true)
+        opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        println("Learning rate: $(opt.opt.rate)")
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true, device=device)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        yz = evaluate(nn, testdata, batchsize=batchsize, device=device)
+        if opt.on
+            yz = replace!(opt,params) do
+                evaluate(nn, testdata, batchsize=100, device=device)
+            end
+        else
+            yz = evaluate(nn, testdata, batchsize=100, device=device)
+        end
+        # yz = evaluate(nn, testdata, batchsize=100, device=device)
         golds, preds = Int[], Int[]
         for (y,z) in yz
             append!(golds, y)

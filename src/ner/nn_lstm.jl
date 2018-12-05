@@ -25,7 +25,7 @@ function (nn::NN_LSTM)(x::NamedTuple)
 
     h = concat(1, w, c)
     h = dropout(h, 0.5, x.training)
-    h,_,_ = nn.lstm(h, x.dims_w, x.training)
+    h, _, _ = nn.lstm(h, x.dims_w, x.training)
     h = dropout(h, 0.5, x.training)
     h = nn.linear(h)
     if x.training
