@@ -1,3 +1,5 @@
+using Unicode
+
 struct Dataset
     data::Vector
     training::Bool
@@ -5,12 +7,13 @@ end
 
 Base.length(dataset::Dataset) = length(dataset.data)
 
-function Merlin.todevice(dataset::Dataset, dev::Int)
-    data = map(dataset.data) do (w,c,dims_c,t)
-        w = todevice(w, dev)
-        c = todevice(c, dev)
-        t = todevice(t, dev)
-        (w, c, dims_c, t)
+function Merlin.todevice(dataset::Dataset)
+    data = map(dataset.data) do (w,c,dims_c,t,u)
+        w = todevice(w)
+        c = todevice(c)
+        t = todevice(t)
+        u = todevice(u)
+        (w, c, dims_c, t, u)
     end
     Dataset(data, dataset.training)
 end
@@ -22,19 +25,29 @@ function Base.getindex(dataset::Dataset, indexes::Vector{Int})
     dims_w = length.(ws)
     w = cat(ws..., dims=1)
     w = reshape(w, 1, length(w))
-    c = cat(map(x -> x[2], data)..., dims=1)
-    c = reshape(c, 1, length(c))
+    c = cat(map(x -> x[2], data)..., dims=2)
+    # c = reshape(c, 1, length(c))
     dims_c = cat(map(x -> x[3], data)..., dims=1)
     t = cat(map(x -> x[4], data)..., dims=1)
-    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), training=dataset.training)
+    u = cat(map(x -> x[5], data)..., dims=1)
+    u = reshape(u, 1, length(u))
+    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), u=Var(u), training=dataset.training)
 end
 
 function readconll(path::String, dicts, training::Bool)
+    if training
+        @assert isempty(dicts.c)
+        dicts.c["unk"] = 1
+        dicts.c["lowercase"] = 2
+        dicts.c["uppercase"] = 3
+        @assert isempty(dicts.t)
+        dicts.t["O"] = 1
+    end
     data = []
     words = String[]
     tagids = Int[]
-    unkword = dicts.w["UNKNOWN"]
-    unkchar = dicts.c["UNKNOWN"]
+    unkword = dicts.w["unk"]
+    unkchar, lowerchar, upperchar = dicts.c["unk"], dicts.c["lowercase"], dicts.c["uppercase"]
 
     lines = open(readlines, path)
     push!(lines, "")
@@ -43,7 +56,7 @@ function readconll(path::String, dicts, training::Bool)
         if isempty(line)
             isempty(words) && continue
             wordids = Int[]
-            charids = Int[]
+            charids = []
             chardims = Int[]
             for w in words
                 # w0 = replace(lowercase(w), r"[0-9]", '0')
@@ -52,19 +65,20 @@ function readconll(path::String, dicts, training::Bool)
 
                 chars = Vector{Char}(w)
                 push!(chardims, length(chars))
-                cids = map(chars) do c
-                    get(dicts.c, string(c), unkchar)
+                cmat = Array{Int}(undef, 2, length(chars))
+                for k = 1:length(chars)
+                    c = chars[k]
+                    cc = lowercase(c)
+                    cmat[1,k] = training ? get!(dicts.c,string(cc),length(dicts.c)+1) : get(dicts.c,string(cc),unkchar)
+                    cmat[2,k] = islowercase(c) ? lowerchar : upperchar
+                    #cmat[2,k] = lowerchar
                 end
-                append!(charids, cids)
+                push!(charids, cmat)
             end
-
-            if maximum(chardims) > 20 || length(wordids) > 150
-                words = String[]
-                tagids = Int[]
-                continue
-            end
-
-            push!(data, (wordids,charids,chardims,tagids))
+            charids = cat(charids..., dims=2)
+            predtags = Int[tagids[k] for k=1:length(tagids)-1]
+            pushfirst!(predtags, 1)
+            push!(data, (wordids,charids,chardims,tagids,predtags))
             words = String[]
             tagids = Int[]
         else
@@ -74,7 +88,11 @@ function readconll(path::String, dicts, training::Bool)
             push!(words, word)
             if length(items) >= 2
                 tag = strip(items[2])
-                push!(tagids, dicts.t[tag])
+                id = training ? get!(dicts.t,tag,length(dicts.t)+1) : dicts.t[tag]
+                push!(tagids, id)
+                if training
+                    get!(dicts.l, tag[3:end], length(dicts.l)+1)
+                end
             else
                 throw("")
             end
@@ -112,5 +130,8 @@ function initvocab(path::String)
     end
     chardict = Dict(chars[i] => i for i=1:length(chars))
     chardict["UNKNOWN"] = length(chardict) + 1
+    chardict["LOWERCASE"] = length(chardict) + 1
+    chardict["UPPERCASE"] = length(chardict) + 1
+    chardict[" "] = length(chardict) + 1
     chardict, tagdict
 end

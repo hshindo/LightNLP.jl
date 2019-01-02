@@ -9,26 +9,32 @@ function Model(config::Dict)
     wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
 
-    chardict, tagdict = initvocab(config["train_file"])
-    charembeds = Normal(0,0.01)(eltype(wordembeds), 20, length(chardict))
-    dicts = (w=worddict, c=chardict, t=tagdict)
-
+    # chardict, tagdict = initvocab(config["train_file"])
+    dicts = (w=worddict, c=Dict{String,Int}(), t=Dict{String,Int}(), l=Dict{String,Int}())
     traindata = readconll(config["train_file"], dicts, true)
     testdata = readconll(config["test_file"], dicts, false)
+    T = eltype(wordembeds)
+    n = length(worddict) - size(wordembeds,2)
+    #if n > 0
+    #    e = Normal(0,0.01)(T, size(wordembeds,1), n)
+    #    wordembeds = cat(wordembeds, e, dims=2)
+    #end
+    charembeds = Uniform(-0.01,0.01)(T, 20, length(dicts.c))
+    tagembeds = Uniform(-0.01,0.01)(T, 20, length(dicts.t))
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_SLSTM(wordembeds, charembeds, length(tagdict))
+        nn = NN_Graph(wordembeds, charembeds, tagembeds)
     else
         throw("Unknown nn")
     end
 
     @info "#Training examples:\t$(length(traindata))"
     @info "#Testing examples:\t$(length(testdata))"
-    @info "#Words:\t$(length(worddict))"
-    @info "#Chars:\t$(length(chardict))"
-    @info "#Tags:\t$(length(tagdict))"
+    @info "#Words:\t$(length(dicts.w))"
+    @info "#Chars:\t$(length(dicts.c))"
+    @info "#Tags:\t$(length(dicts.t))"
     m = Model(config, dicts, nn)
     train!(m, traindata, testdata)
     m
@@ -36,28 +42,28 @@ end
 
 function train!(model::Model, traindata, testdata)
     config = model.config
-    device = config["device"]
+    Merlin.setdevice(config["device"])
     opt = ASGD(SGD())
-    nn = todevice(model.nn, device)
+    nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
-        epoch == 100 && (opt.on = true)
+        # epoch == 100 && (opt.on = true)
         opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         println("Learning rate: $(opt.opt.rate)")
 
-        loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true, device=device)
+        loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
         if opt.on
             yz = replace!(opt,params) do
-                evaluate(nn, testdata, batchsize=100, device=device)
+                evaluate(nn, testdata, batchsize=100)
             end
         else
-            yz = evaluate(nn, testdata, batchsize=100, device=device)
+            yz = evaluate(nn, testdata, batchsize=100)
         end
         # yz = evaluate(nn, testdata, batchsize=100, device=device)
         golds, preds = Int[], Int[]
@@ -73,7 +79,29 @@ function train!(model::Model, traindata, testdata)
     #model.nn = todevice(model.nn, -1)
 end
 
-function fscore(golds::Vector{T}, preds::Vector{T}) where T
+function fscore_tag(golds::Vector, preds::Vector)
+    dict = Dict()
+    for (i,j,tag) in golds
+        data = get!(dict, tag) do
+            (golds=[], preds=[])
+        end
+        push!(data.golds, (i,j,tag))
+    end
+    for (i,j,tag) in preds
+        data = dict[tag]
+        push!(data.preds, (i,j,tag))
+    end
+    for (tag,data) in dict
+        println("----------")
+        println("Tag: $tag")
+        fscore(data.golds, data.preds)
+    end
+    println("----------")
+    println("All")
+    fscore(golds, preds)
+end
+
+function fscore(golds::Vector, preds::Vector)
     set = intersect(Set(golds), Set(preds))
     count = length(set)
     prec = round(count/length(preds), digits=5)

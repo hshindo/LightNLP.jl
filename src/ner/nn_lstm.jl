@@ -6,11 +6,12 @@ mutable struct NN_LSTM <: Functor
     linear
 end
 
-function NN_LSTM(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
+function NN_LSTM(wordembeds::Matrix{T}, charembeds::Matrix{T}, tagembeds::Matrix{T}) where T
+    ntags = size(tagembeds, 2)
     wordembeds = parameter(wordembeds)
     charembeds = parameter(charembeds)
     csize = size(charembeds, 1)
-    conv = Conv1d(T, 5, csize, 5csize, padding=2)
+    conv = Conv1d(T, 5, 2csize, 5csize, padding=2)
     hsize = size(wordembeds,1) + 5csize
     lstm = LSTM(T, hsize, hsize, 1, 0.0, true)
     linear = Linear(T, 2hsize, ntags)
