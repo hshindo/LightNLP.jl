@@ -10,7 +10,7 @@ function Model(config::Dict)
     worddict = Dict(words[i] => i for i=1:length(words))
 
     # chardict, tagdict = initvocab(config["train_file"])
-    dicts = (w=worddict, c=Dict{String,Int}(), t=Dict{String,Int}(), l=Dict{String,Int}())
+    dicts = (word=worddict, char=Dict{String,Int}(), tag=Dict{String,Int}())
     traindata = readconll(config["train_file"], dicts, true)
     testdata = readconll(config["test_file"], dicts, false)
     T = eltype(wordembeds)
@@ -19,22 +19,21 @@ function Model(config::Dict)
     #    e = Normal(0,0.01)(T, size(wordembeds,1), n)
     #    wordembeds = cat(wordembeds, e, dims=2)
     #end
-    charembeds = Uniform(-0.01,0.01)(T, 20, length(dicts.c))
-    tagembeds = Uniform(-0.01,0.01)(T, 20, length(dicts.t))
+    charembeds = Uniform(-0.1,0.1)(T, 20, length(dicts.char))
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_Graph(wordembeds, charembeds, tagembeds)
+        nn = NN_Graph(wordembeds, charembeds, length(dicts.tag))
     else
         throw("Unknown nn")
     end
 
     @info "#Training examples:\t$(length(traindata))"
     @info "#Testing examples:\t$(length(testdata))"
-    @info "#Words:\t$(length(dicts.w))"
-    @info "#Chars:\t$(length(dicts.c))"
-    @info "#Tags:\t$(length(dicts.t))"
+    @info "#Words:\t$(length(dicts.word))"
+    @info "#Chars:\t$(length(dicts.char))"
+    @info "#Tags:\t$(length(dicts.tag))"
     m = Model(config, dicts, nn)
     train!(m, traindata, testdata)
     m
@@ -52,6 +51,7 @@ function train!(model::Model, traindata, testdata)
         println("Epoch:\t$epoch")
         # epoch == 100 && (opt.on = true)
         opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         println("Learning rate: $(opt.opt.rate)")
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
@@ -71,8 +71,10 @@ function train!(model::Model, traindata, testdata)
             append!(golds, y)
             append!(preds, z)
         end
-        preds = bioes_decode(preds, model.dicts.t)
-        golds = bioes_decode(golds, model.dicts.t)
+        # accuracy(golds, preds, model.dicts.tag)
+        # oracles = bioes_decode_oracle(preds, model.dicts.tag)
+        preds = bioes_decode(preds, model.dicts.tag)
+        golds = bioes_decode(golds, model.dicts.tag)
         fscore(golds, preds)
         println()
     end
@@ -107,9 +109,32 @@ function fscore(golds::Vector, preds::Vector)
     prec = round(count/length(preds), digits=5)
     recall = round(count/length(golds), digits=5)
     fval = round(2*recall*prec/(recall+prec), digits=5)
+    println("----------")
     println("Prec:\t$prec")
     println("Recall:\t$recall")
     println("Fscore:\t$fval")
+end
+
+function accuracy(golds::Vector, preds::Vector, dict::Dict)
+    @assert length(golds) == length(preds)
+    counts = [0 for _=1:length(dict)]
+    totals = [0 for _=1:length(dict)]
+    for i = 1:length(golds)
+        g, p = golds[i], preds[i]
+        totals[g] += 1
+        g == p && (counts[g] += 1)
+    end
+    tags = Array{String}(undef, length(dict))
+    foreach(x -> tags[x[2]] = x[1], dict)
+    println("----------")
+    println("Accuracy:")
+    acc = round(sum(counts)/sum(totals), digits=5)
+    println("Total:\t$acc")
+    for i = 1:length(counts)
+        c, t = counts[i], totals[i]
+        acc = round(c/t, digits=5)
+        println("$(tags[i]):\t$acc ($c/$t)")
+    end
 end
 
 function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
@@ -130,6 +155,37 @@ function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
             tag = id2tag[ids[bpos]]
             basetag = length(tag) > 2 ? tag[3:end] : ""
             push!(spans, (bpos,i,basetag))
+            bpos = 0
+        end
+    end
+    spans
+end
+
+function bioes_decode_oracle(ids::Vector{Int}, tagdict::Dict{String,Int})
+    id2tag = Array{String}(undef, length(tagdict))
+    for (k,v) in tagdict
+        id2tag[v] = k
+    end
+
+    spans = Tuple{Int,Int,String}[]
+    bpos = 0
+    bprev = 0
+    for i = 1:length(ids)
+        tag = id2tag[ids[i]]
+        tag == "O" && continue
+        startswith(tag,"B") && (bpos = i)
+        startswith(tag,"S") && (bpos = i)
+        nexttag = i == length(ids) ? "O" : id2tag[ids[i+1]]
+        if (startswith(tag,"S") || startswith(tag,"E")) && bpos > 0
+            tag = id2tag[ids[bpos]]
+            basetag = length(tag) > 2 ? tag[3:end] : ""
+            push!(spans, (bpos,i,basetag))
+            if bprev > 0
+                tag = id2tag[ids[bprev]]
+                basetag = length(tag) > 2 ? tag[3:end] : ""
+                push!(spans, (bprev,i,basetag))
+            end
+            bprev = bpos
             bpos = 0
         end
     end
