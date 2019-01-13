@@ -1,3 +1,6 @@
+export IntDict
+export countfilter!
+
 """
     IntDict{T}
 
@@ -41,6 +44,17 @@ function Base.push!(dict::IntDict, key)
     id
 end
 Base.append!(dict::IntDict, keys::Vector) = map(k -> push!(dict,k), keys)
+
+function Base.replace!(dict::IntDict, newid::Int; count::Int)
+    for id = 1:length(dict)
+        Base.count(dict,id) > count && push!(keys,dict[id])
+        if Base.count(dict,id) <= count
+            delete!(dict.key2id, dict[id])
+            dict.id2key[id] = dict.id2key[newid]
+            dict.id2count[id] = 0
+        end
+    end
+end
 
 function save(dict::IntDict)
     throw("Not implemented yet.")

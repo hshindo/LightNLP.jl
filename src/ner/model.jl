@@ -9,6 +9,9 @@ function Model(config::Dict)
     wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
 
+    flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
+    flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
+
     # chardict, tagdict = initvocab(config["train_file"])
     dicts = (word=worddict, char=Dict{String,Int}(), tag=Dict{String,Int}())
     traindata = readconll(config["train_file"], dicts, true)
@@ -19,12 +22,12 @@ function Model(config::Dict)
     #    e = Normal(0,0.01)(T, size(wordembeds,1), n)
     #    wordembeds = cat(wordembeds, e, dims=2)
     #end
-    charembeds = Uniform(-0.1,0.1)(T, 20, length(dicts.char))
+    charembeds = Uniform(-0.01,0.01)(T, 20, length(dicts.char))
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_Graph(wordembeds, charembeds, length(dicts.tag))
+        nn = NN_Graph(wordembeds, flair_train, flair_test, charembeds, length(dicts.tag))
     else
         throw("Unknown nn")
     end
@@ -42,7 +45,7 @@ end
 function train!(model::Model, traindata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
-    opt = ASGD(SGD())
+    opt = SGD()
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
@@ -50,22 +53,26 @@ function train!(model::Model, traindata, testdata)
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # epoch == 100 && (opt.on = true)
-        opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        #opt.alpha = opt.alpha / (1 + 0.1*epoch)
+        opt.rate = 0.15 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
+        #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
-        println("Learning rate: $(opt.opt.rate)")
+        #opt.opt.rate = 0.0
+        #println("Learning rate: $(opt.rate)")
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        if opt.on
-            yz = replace!(opt,params) do
-                evaluate(nn, testdata, batchsize=100)
-            end
-        else
-            yz = evaluate(nn, testdata, batchsize=100)
-        end
+        #if opt.on
+        #    yz = replace!(opt,params) do
+        #        evaluate(nn, testdata, batchsize=100)
+        #    end
+        #else
+        #    yz = evaluate(nn, testdata, batchsize=100)
+        #end
         # yz = evaluate(nn, testdata, batchsize=100, device=device)
+        yz = evaluate(nn, testdata, batchsize=100)
         golds, preds = Int[], Int[]
         for (y,z) in yz
             append!(golds, y)

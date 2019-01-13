@@ -8,5 +8,5 @@
   "batchsize": 10,
   "training": true,
   "nn": "lstm",
-  "device": 0
+  "device": 1
 }

@@ -13,7 +13,7 @@ end
 include("intdict.jl")
 #include("depparser/DepParser.jl")
 include("ner/NER.jl")
-include("lm/LM.jl")
+#include("lm/LM.jl")
 #include("tokenization/Tokenization.jl")
 
 export namedtuple

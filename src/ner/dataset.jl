@@ -7,11 +7,12 @@ end
 Base.length(dataset::Dataset) = length(dataset.data)
 
 function Merlin.todevice(dataset::Dataset)
-    data = map(dataset.data) do (w,c,dims_c,t)
+    data = map(dataset.data) do (w,c,dims_c,t,count)
         w = todevice(w)
         c = todevice(c)
         t = todevice(t)
-        (w=w, c=c, dims_c=dims_c, t=t)
+        count = todevice(count)
+        (w=w, c=c, dims_c=dims_c, t=t, count=count)
     end
     Dataset(data)
 end
@@ -26,7 +27,9 @@ function Base.getindex(dataset::Dataset, indexes::Vector{Int})
     c = cat(map(x -> x[2], data)..., dims=2)
     dims_c = cat(map(x -> x[3], data)..., dims=1)
     t = cat(map(x -> x[4], data)..., dims=1)
-    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t))
+    count = cat(map(x -> x[5], data)..., dims=1)
+    count = reshape(count, 1, length(count))
+    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), count=Var(count))
 end
 
 function readconll(path::String, dicts, training::Bool)
@@ -46,17 +49,22 @@ function readconll(path::String, dicts, training::Bool)
 
     lines = open(readlines, path)
     push!(lines, "")
+    wordcount = 1
     for i = 1:length(lines)
         line = lines[i]
         if isempty(line)
             isempty(words) && continue
+
             wordids = Int[]
             charids = []
             chardims = Int[]
+            countids = Int[]
             for w in words
                 # w0 = replace(lowercase(w), r"[0-9]", '0')
                 id = get(dicts.word, lowercase(w), unkword)
                 push!(wordids, id)
+                push!(countids, wordcount)
+                wordcount += 1
 
                 chars = Vector{Char}(w)
                 push!(chardims, length(chars))
@@ -70,7 +78,7 @@ function readconll(path::String, dicts, training::Bool)
                 push!(charids, cmat)
             end
             charids = cat(charids..., dims=2)
-            push!(data, (wordids,charids,chardims,tagids))
+            push!(data, (wordids,charids,chardims,tagids,countids))
             words = String[]
             tagids = Int[]
         else
@@ -95,6 +103,7 @@ function readconll(path::String, dicts, training::Bool)
 end
 
 function initvocab(path::String)
+    worddict = Dict{String,Int}()
     chardict = Dict{String,Int}()
     tagdict = Dict{String,Int}()
     lines = open(readlines, path)

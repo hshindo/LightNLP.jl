@@ -21,4 +21,6 @@ function glove2h5(filename::String)
     h5write("glove.42B.300d.h5", "words", words)
     h5write("glove.42B.300d.h5", "vectors", vectors)
 end
-glove2h5("glove.42B.300d.txt")
+
+# glove2h5("glove.42B.300d.txt")
+flair2h5("/home/hshindo/Documents/flair/out.txt")
