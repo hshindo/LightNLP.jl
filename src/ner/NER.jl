@@ -11,5 +11,6 @@ include("model.jl")
 #include("nn_slstm.jl")
 include("gatedunit.jl")
 include("nn_graph.jl")
+include("nn_flair.jl")
 
 end

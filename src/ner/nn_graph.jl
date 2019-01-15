@@ -15,8 +15,8 @@ function weightdrop!(f::GatedLinear)
 end
 
 function (f::GatedLinear)(x::Var)
-    h = linear(x, f.W, f.l1.b)
-    #h = f.l1(x)
+    #h = linear(x, f.W, f.l1.b)
+    h = f.l1(x)
     n = size(h,1) ÷ 2
     a = tanh(h[1:n,:])
     b = sigmoid(h[n+1:2n,:])
@@ -35,22 +35,25 @@ mutable struct NN_Graph <: Functor
     conv_word2
     conv_g
     linear_out
+    crf
 end
 
 function NN_Graph(wordembeds::Matrix{T}, flair_train, flair_test, charembeds::Matrix{T}, ntags::Int) where T
-    wordembeds = parameter(wordembeds)
+    wordembeds = Var(wordembeds)
     charembeds = parameter(charembeds)
-    csize = size(charembeds, 1) * 2
+    csize = 2size(charembeds, 1)
     #conv = Conv1d(T, 3, 2csize, 5csize, padding=1)
     conv_char = Conv1d(T, 3, csize, csize, padding=1)
-    #wsize = size(wordembeds, 1) + size(flair_train, 1)
     wsize = size(wordembeds, 1)
-    hsize = 520
-    # conv_word2 = GatedLinear(T, 3*(hsize+wsize+csize)+hsize, hsize)
-    conv_word2 = Conv1d(T, 9, hsize+wsize+csize, 2hsize, padding=4, ngroups=3)
+    #wsize = size(wordembeds, 1) + size(flair_train, 1)
+    hsize = 600
+    conv_word2 = GatedLinear(T, 3*(hsize+wsize+csize)+hsize, hsize)
+    #conv_word2 = Conv1d(T, 3, hsize+wsize+csize+ntags, 2hsize, padding=1, ngroups=1)
     conv_g = Linear(T, hsize, 2hsize)
-    linear_out = Linear(T, 4hsize, ntags)
-    NN_Graph(wordembeds, flair_train, flair_test, charembeds, hsize, ntags, conv_char, conv_word2, conv_g, linear_out)
+    linear_out = Linear(T, hsize, ntags)
+    #crf = RNNCRF(T, ntags, hsize)
+    crf = nothing
+    NN_Graph(wordembeds, flair_train, flair_test, charembeds, hsize, ntags, conv_char, conv_word2, conv_g, linear_out, crf)
 end
 
 function (nn::NN_Graph)(x::NamedTuple)
@@ -63,27 +66,24 @@ function (nn::NN_Graph)(x::NamedTuple)
     #    fw = lookup(nn.flair_test, x.count)
     #end
     #w = concat(1, w, fw)
-    w = dropout(w, 0.5)
+    #w = dropout(w, 0.5)
 
     c = lookup(nn.charembeds, x.c)
     #c = dropout_dim(c, 0.1)
-    c = dropout(c, 0.5)
+    #c = dropout(c, 0.5)
     c = nn.conv_char(c, x.dims_c)
     c = max(c, x.dims_c)
     wc = concat(1, w, c)
-    wc = dropout_dim(wc, 0.25)
+    wc = dropout_dim(wc, 1, 0.5)
+    # wc = dropout_dim(wc, 2, 0.1)
 
     hsize = nn.hsize
     # weightdrop!(nn.conv_word2)
     h = Var(fill!(similar(w0.data,hsize,size(w0,2)),0))
     g = Var(fill!(similar(w0.data,hsize,length(x.dims_w)),0))
-
+    # o = Var(fill!(similar(w0.data,nn.ntags,size(w0,2)),0))
     hs = Var[]
     for i = 1:4
-        #w = concat(1, w, w0, h)
-        #w = nn.linear_word(w)
-        #w = w0
-
         gs = Var[]
         for k = 1:length(x.dims_w)
             d = x.dims_w[k]
@@ -93,11 +93,11 @@ function (nn::NN_Graph)(x::NamedTuple)
         g0 = concat(2, gs...)
 
         h0 = concat(1, h, wc)
-        h0 = nn.conv_word2(h0,x.dims_w) + nn.conv_g(g0)
-        h = gate2(h0)
-        #h0 = window1d(h0, x.dims_w, 3, 1, 1, 1)
-        #h0 = concat(1, h0, g0)
-        #h = nn.conv_word2(h0)
+        # h0 = nn.conv_word2(h0,x.dims_w) + nn.conv_g(g0)
+        #h = gate2(h0)
+        h0 = window1d(h0, x.dims_w, 3, 1, 1, 1)
+        h0 = concat(1, h0, g0)
+        h = nn.conv_word2(h0)
         push!(hs, h)
 
         #g = nn.conv_g(h, x.dims_w)
@@ -109,18 +109,20 @@ function (nn::NN_Graph)(x::NamedTuple)
         #g = average(g, 2, keepdims=false)
         # h = zoneout(h, h1, 0.1, x.training)
     end
-    #h = concat(2, hs...)
-    #h = reshape(h, hsize, size(hs[1],2), length(hs))
-    #h = average(h, 3, keepdims=false)
-    h = concat(1, hs...)
-    h = dropout(h, 0.5)
-    h = nn.linear_out(h)
+    h = concat(2, hs...)
+    h = reshape(h, size(h,1), size(hs[1],2), length(hs))
+    h = average(h, 3, keepdims=false)
+    # h = dropout(h, 0.5)
+    h = dropout_dim(h, 1, 0.5)
+    o = nn.linear_out(h)
+    h = o
+    # h = nn.crf(o, x.dims_w, 4)
 
     if Merlin.istraining()
         # t = flip(x.t, nn.ntags, 0.03)
-        loss = softmax_crossentropy(x.t, h)
-        average(loss, 1)
+        softmax_crossentropy(x.t, h)
     else
+        # Merlin.printw(nn.crf)
         y = Array{Int}(Array(x.t.data))
         z = Array{Int}(argmax(Array(h.data),1))
         vec(y), vec(z)

@@ -8,6 +8,7 @@ function Model(config::Dict)
     words = h5read(config["wordvec_file"], "words")
     wordembeds = h5read(config["wordvec_file"], "vectors")
     worddict = Dict(words[i] => i for i=1:length(words))
+    wordembeds[:,worddict["unk"]] = zeros(Float32,size(wordembeds,1))
 
     flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
     flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
@@ -28,6 +29,7 @@ function Model(config::Dict)
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
         nn = NN_Graph(wordembeds, flair_train, flair_test, charembeds, length(dicts.tag))
+        # nn = NN_LSTM(wordembeds, flair_train, flair_test, length(dicts.tag))
     else
         throw("Unknown nn")
     end
@@ -49,20 +51,27 @@ function train!(model::Model, traindata, testdata)
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
-
+    #batchsize = 32
+    #losses = Float32[]
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # epoch == 100 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
-        opt.rate = 0.15 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
+        opt.rate = 0.25 / (1 + 0.05*(epoch-1))
+        # opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
-        #println("Learning rate: $(opt.rate)")
+        println("Learning rate: $(opt.rate)")
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
+        # push!(losses, loss)
         loss /= length(traindata)
         println("Loss:\t$loss")
+        #if epoch % 5 == 0
+        #    minimum(losses) < losses[1] || (opt.rate /= 2.0)
+        #    empty!(losses)
+        #end
 
         #if opt.on
         #    yz = replace!(opt,params) do
