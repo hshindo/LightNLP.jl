@@ -10,8 +10,10 @@ function Model(config::Dict)
     worddict = Dict(words[i] => i for i=1:length(words))
     # wordembeds[:,worddict["unk"]] = zeros(Float32,size(wordembeds,1))
 
-    flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
-    flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
+    #flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
+    #flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
+    flair_train = Var(rand(Float32,10,10))
+    flair_test = Var(rand(Float32,10,10))
 
     # chardict, tagdict = initvocab(config["train_file"])
     dicts = (word=worddict, char=Dict{String,Int}(), tag=Dict{String,Int}())
@@ -55,14 +57,18 @@ function train!(model::Model, traindata, testdata)
     #losses = Float32[]
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
-        # epoch == 100 && (opt.on = true)
+        #epoch == 200 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
-        opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
-        # opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
+        #opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
         # opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
-        println("Learning rate: $(opt.rate)")
+        #println("Learning rate: $(opt.opt.rate)")
+
+        #batchsize = config["batchsize"] * (1 + 0.05*(epoch-1))
+        #batchsize = round(Int, batchsize)
+        #println("Batchsize: $batchsize")
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         # push!(losses, loss)
@@ -80,7 +86,6 @@ function train!(model::Model, traindata, testdata)
         #else
         #    yz = evaluate(nn, testdata, batchsize=100)
         #end
-        # yz = evaluate(nn, testdata, batchsize=100, device=device)
         yz = evaluate(nn, testdata, batchsize=100)
         golds, preds = Int[], Int[]
         for (y,z) in yz

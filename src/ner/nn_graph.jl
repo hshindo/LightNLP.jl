@@ -29,6 +29,16 @@ function (f::GatedLinear)(x::Var)
     h
 end
 
+function expand(x::Var, dims)
+    ys = Var[]
+    for i = 1:length(dims)
+        d = dims[i]
+        y = repeat(x[:,i:i], 1, d)
+        push!(ys, y)
+    end
+    concat(2, ys...)
+end
+
 mutable struct NN_Graph <: Functor
     wordembeds
     flair_train
@@ -38,9 +48,8 @@ mutable struct NN_Graph <: Functor
     ntags
     conv_char
     conv_word2
-    lstm
+    conv_g
     linear_out
-    crf
 end
 
 function NN_Graph(wordembeds::Matrix{T}, flair_train, flair_test, charembeds::Matrix{T}, ntags::Int) where T
@@ -50,62 +59,56 @@ function NN_Graph(wordembeds::Matrix{T}, flair_train, flair_test, charembeds::Ma
     #conv = Conv1d(T, 3, 2csize, 5csize, padding=1)
     conv_char = Conv1d(T, 3, csize, csize, padding=1)
     #wsize = size(wordembeds, 1)
-    hsize = 600
+    hsize = 700
     # wsize = size(wordembeds, 1)
     wsize = size(wordembeds, 1)
 
-    lstmsize = wsize + size(flair_train, 1)
-    lstm_out = 256
-    lstm = LSTM(T, lstmsize, lstm_out, 1, 0.0, true)
+    #lstmsize = size(flair_train, 1)
+    #lstm_out = 256
+    #lstm = LSTM(T, lstmsize, lstm_out, 1, 0.0, true)
     # conv_word2 = GatedLinear(T, 3*(hsize+wsize+csize)+hsize, hsize)
-    conv_word2 = GatedLinear(T, 3*(hsize+wsize+csize+2lstm_out)+hsize, hsize)
+    conv_word2 = GatedLinear(T, 3*(hsize+wsize+csize)+hsize, hsize)
     #conv_word2 = Conv1d(T, 3, hsize+wsize+csize+ntags, 2hsize, padding=1, ngroups=1)
+    conv_g = Linear(T, hsize, hsize)
 
     linear_out = Linear(T, hsize, ntags)
-    #crf = RNNCRF(T, ntags, hsize)
-    crf = nothing
-    NN_Graph(wordembeds, flair_train, flair_test, charembeds, hsize, ntags, conv_char, conv_word2, lstm, linear_out, crf)
+    NN_Graph(wordembeds, flair_train, flair_test, charembeds, hsize, ntags, conv_char, conv_word2, conv_g, linear_out)
 end
 
 function (nn::NN_Graph)(x::NamedTuple)
     w0 = lookup(nn.wordembeds, x.w)
     w = w0
     # w = Var(zero(w0.data))
-    if Merlin.istraining()
-        fw = lookup(nn.flair_train, x.count)
-    else
-        fw = lookup(nn.flair_test, x.count)
-    end
-    h1 = concat(1, w, fw)
-    h1 = dropout(h1, 0.5)
-    h1, _, _ = nn.lstm(h1, x.dims_w)
+    #if Merlin.istraining()
+    #    fw = lookup(nn.flair_train, x.count)
+    #else
+    #    fw = lookup(nn.flair_test, x.count)
+    #end
 
-    #wc = concat(1, w, fw)
-    # w = dropout(w, 0.5)
+    # LSTM
+    #h1 = fw
+    #h1 = dropout(h1, 0.5)
+    #h1 = dropout_dim(h1, 2, 0.5)
+    #h1, _, _ = nn.lstm(h1, x.dims_w)
 
     c = lookup(nn.charembeds, x.c)
     c = dropout(c, 0.5)
     c = nn.conv_char(c, x.dims_c)
     c = max(c, x.dims_c)
-    wc = concat(1, w, c, h1)
+    wc = concat(1, w, c)
     wc = dropout(wc, 0.5)
     wc = dropout_dim(wc, 2, 0.2)
 
     hsize = nn.hsize
     h = Var(fill!(similar(w0.data,hsize,size(w0,2)),0))
     g = Var(fill!(similar(w0.data,hsize,length(x.dims_w)),0))
+    #g = Var(fill!(similar(w0.data,hsize,size(w0,2)),0))
     # dropout_g = LockedDropout(0.5)
     # dropout_word = LockedDropout(0.2)
     # o = Var(fill!(similar(w0.data,nn.ntags,size(w0,2)),0))
     hs = Var[]
     for i = 1:4
-        gs = Var[]
-        for k = 1:length(x.dims_w)
-            d = x.dims_w[k]
-            gg = repeat(g[:,k:k], 1, d)
-            push!(gs, gg)
-        end
-        g0 = concat(2, gs...)
+        g0 = expand(g, x.dims_w)
 
         h0 = concat(1, h, wc)
         h0 = window1d(h0, x.dims_w, 3, 1, 1, 1)
@@ -115,7 +118,9 @@ function (nn::NN_Graph)(x::NamedTuple)
 
         #g = nn.conv_g(h, x.dims_w)
         #g = max(g, x.dims_w)
+        #g = nn.conv_g(h)
         g = average(h, x.dims_w)
+        #g = avgpooling1d(h, x.dims_w, 7, padding=3)
         # g = dropout_g(g)
         #g = conv_g()
         #g = concat(1, g, g0)
@@ -129,7 +134,6 @@ function (nn::NN_Graph)(x::NamedTuple)
     h = concat(2, hs...)
     h = reshape(h, size(h,1), size(hs[1],2), length(hs))
     h = average(h, 3, keepdims=false)
-    # h = nn.crf(o, x.dims_w, 4)
     h = dropout(h, 0.5)
     o = nn.linear_out(h)
     h = o
