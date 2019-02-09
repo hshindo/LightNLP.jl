@@ -9,15 +9,6 @@ function GatedLinear(::Type{T}, insize, outsize) where T
     GatedLinear(l1)
 end
 
-function weightdrop!(f::GatedLinear)
-    W = f.l1.W
-    W = dropout(W, 0.5)
-    W = dropout_dim(W, 1, 0.1)
-    # W = dropout_dim(W, 2, 0.25)
-    # W = dropout(W, 0.5)
-    f.W = W
-end
-
 function (f::GatedLinear)(x::Var)
     #f.W == nothing && (f.W = f.l1.W)
     #h = linear(x, f.W, f.l1.b)
