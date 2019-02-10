@@ -19,7 +19,7 @@ function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where
     hsize = 700
 
     conv_char = Conv1d(T, 3, csize, csize, padding=1)
-    conv_h = Conv1d(T, 3, wsize+csize+2hsize, 2hsize)
+    conv_h = Conv1d(T, 3, wsize+csize+2hsize, 2hsize, padding=1)
     linear_out = Linear(T, hsize, ntags)
     NN_RCNN(wordembeds, charembeds, hsize, ntags, conv_char, conv_h, linear_out)
 end
