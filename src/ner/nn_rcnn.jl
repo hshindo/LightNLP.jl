@@ -40,7 +40,7 @@ function (nn::NN_RCNN)(x::NamedTuple)
     for t = 1:4
         g = expand(g, x.dims_w)
         h = concat(1, wc, h, g)
-        h = nn.conv_h(h)
+        h = nn.conv_h(h, x.dims_w)
         h = gate(h)
         push!(hs, h)
         g = average(h, x.dims_w)

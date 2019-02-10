@@ -12,15 +12,15 @@ function Model(config::Dict)
 
     #flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
     #flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
-    flair_train = Var(rand(Float32,10,10))
-    flair_test = Var(rand(Float32,10,10))
+    #flair_train = Var(rand(Float32,10,10))
+    #flair_test = Var(rand(Float32,10,10))
 
     # chardict, tagdict = initvocab(config["train_file"])
     dicts = (word=worddict, char=Dict{String,Int}(), tag=Dict{String,Int}())
     traindata = readconll(config["train_file"], dicts, true)
     testdata = readconll(config["test_file"], dicts, false)
     T = eltype(wordembeds)
-    n = length(worddict) - size(wordembeds,2)
+    #n = length(worddict) - size(wordembeds,2)
     #if n > 0
     #    e = Normal(0,0.01)(T, size(wordembeds,1), n)
     #    wordembeds = cat(wordembeds, e, dims=2)
@@ -30,7 +30,7 @@ function Model(config::Dict)
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_Graph(wordembeds, flair_train, flair_test, charembeds, length(dicts.tag))
+        nn = NN_RCNN(wordembeds, charembeds, length(dicts.tag))
         # nn = NN_LSTM(wordembeds, flair_train, flair_test, length(dicts.tag))
     else
         throw("Unknown nn")
