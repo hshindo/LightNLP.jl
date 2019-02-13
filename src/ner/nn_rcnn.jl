@@ -9,6 +9,7 @@ mutable struct NN_RCNN <: Functor
     conv_char
     conv_h
     linear_out
+    crf
 end
 
 function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
@@ -21,7 +22,8 @@ function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where
     conv_char = Conv1d(T, 3, csize, csize, padding=1)
     conv_h = Conv1d(T, 3, wsize+csize+2hsize, 2hsize, padding=1)
     linear_out = Linear(T, hsize, ntags)
-    NN_RCNN(wordembeds, charembeds, hsize, ntags, conv_char, conv_h, linear_out)
+    crf = RNNCRF(T, ntags)
+    NN_RCNN(wordembeds, charembeds, hsize, ntags, conv_char, conv_h, linear_out, crf)
 end
 
 function (nn::NN_RCNN)(x::NamedTuple)
@@ -50,6 +52,7 @@ function (nn::NN_RCNN)(x::NamedTuple)
     h = average(h, 3, keepdims=false)
     h = dropout(h, 0.5)
     h = nn.linear_out(h)
+    h = nn.crf(h, x.dims_w)
 
     if Merlin.istraining()
         softmax_crossentropy(x.t, h)
