@@ -1,25 +1,37 @@
-function bioes_decode(ids::Vector{Int}, tagdict::Dict{String,Int})
-    id2tag = Array{String}(undef, length(tagdict))
-    for (k,v) in tagdict
-        id2tag[v] = k
-    end
-
+function bioes_decode(tagdict::IntDict{String}, tagids::Vector{Int})
+    nospan = tagdict["NO_SPAN"]
     spans = Tuple{Int,Int,String}[]
+    offs = 0
+    for k = 1:10
+        n = length(tags)- k + 1
+        ids = tagids[offs+1:offs+n]
+        for i = 1:n
+            ids[i] == nospan && continue
+            tag = tagdict[ids[i]]
+            push!(spans, (i,i+k-1,tag))
+        end
+        offs += n
+    end
+    spans
+end
+
+function bioes_encode!(tagdict::IntDict{String}, tags::Vector{String})
+    spantags = [[tagdict["NO_SPAN"] for _=1:length(tags)-k+1] for k=1:10]
     bpos = 0
-    for i = 1:length(ids)
-        tag = id2tag[ids[i]]
+    for i = 1:length(tags)
+        tag = tags[i]
         tag == "O" && continue
-        startswith(tag,"B") && (bpos = i)
-        startswith(tag,"S") && (bpos = i)
-        nexttag = i == length(ids) ? "O" : id2tag[ids[i+1]]
-        if (startswith(tag,"S") || startswith(tag,"E")) && bpos > 0
-            tag = id2tag[ids[bpos]]
-            basetag = length(tag) > 2 ? tag[3:end] : ""
-            push!(spans, (bpos,i,basetag))
+        catid = get!(tagdict, tag[3:end])
+        if startswith(tag,"B")
+            bpos = i
+        elseif startswith(tag,"S")
+            spantags[1][i] = catid
+        elseif startswith(tag,"E")
+            spantags[i-bpos+1][bpos] = catid
             bpos = 0
         end
     end
-    spans
+    cat(Iterators.flatten(spantags)..., dims=1)
 end
 
 function bioes_check(ids::Vector{Int}, tagdict::Dict{String,Int})
@@ -81,12 +93,26 @@ function bioes_decode_oracle(ids::Vector{Int}, tagdict::Dict{String,Int})
     spans
 end
 
-function bioes_3gram(tagdict::Dict{String,Int})
+function bioes_decode2(tagdict::IntDict{String}, ids::Vector{Int})
     id2tag = Array{String}(undef, length(tagdict))
     for (k,v) in tagdict
         id2tag[v] = k
     end
-    "O", "O"
-    "O", "B"
-    "O", "S"
+
+    spans = Tuple{Int,Int,String}[]
+    bpos = 0
+    for i = 1:length(ids)
+        tag = id2tag[ids[i]]
+        tag == "O" && continue
+        startswith(tag,"B") && (bpos = i)
+        startswith(tag,"S") && (bpos = i)
+        nexttag = i == length(ids) ? "O" : id2tag[ids[i+1]]
+        if (startswith(tag,"S") || startswith(tag,"E")) && bpos > 0
+            tag = id2tag[ids[bpos]]
+            basetag = length(tag) > 2 ? tag[3:end] : ""
+            push!(spans, (bpos,i,basetag))
+            bpos = 0
+        end
+    end
+    spans
 end

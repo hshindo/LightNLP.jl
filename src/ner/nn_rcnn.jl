@@ -9,7 +9,6 @@ mutable struct NN_RCNN <: Functor
     conv_char
     conv_h
     linear_out
-    crf
 end
 
 function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where T
@@ -22,24 +21,23 @@ function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ntags::Int) where
     conv_char = Conv1d(T, 3, csize, csize, padding=1)
     conv_h = Conv1d(T, 3, wsize+csize+2hsize, 2hsize, padding=1)
     linear_out = Linear(T, hsize, ntags)
-    crf = RNNCRF(T, ntags)
-    NN_RCNN(wordembeds, charembeds, hsize, ntags, conv_char, conv_h, linear_out, crf)
+    NN_RCNN(wordembeds, charembeds, hsize, ntags, conv_char, conv_h, linear_out)
 end
 
 function (nn::NN_RCNN)(x::NamedTuple)
     w = lookup(nn.wordembeds, x.w)
     c = lookup(nn.charembeds, x.c)
-    c = dropout(c, 0.5)
+    # c = dropout(c, 0.5)
     c = nn.conv_char(c, x.dims_c)
     c = max(c, x.dims_c)
     wc = concat(1, w, c)
     wc = dropout(wc, 0.5)
-    wc = dropout_dim(wc, 2, 0.2) # word-level dropout
+    wc = dropout_dim(wc, 2, 0.15) # word-level dropout
 
     h = zero(w, nn.hsize, size(w,2))
     g = zero(w, nn.hsize, length(x.dims_w))
     hs = Var[]
-    for t = 1:4
+    for _ = 1:4
         g = expand(g, x.dims_w)
         h = concat(1, wc, h, g)
         h = nn.conv_h(h, x.dims_w)
@@ -51,8 +49,16 @@ function (nn::NN_RCNN)(x::NamedTuple)
     h = reshape(h, size(h,1), size(hs[1],2), length(hs))
     h = average(h, 3, keepdims=false)
     h = dropout(h, 0.5)
+
+    hsize = size(h, 1)
+    for ksize = 1:5
+        #h = window1d(h, dims, ksize, 0, 1, 1)
+        #h = reshape(h, hsize, ksize, size(h,2))
+        #h = average(h, 2, keepdims=false)
+    end
+
     h = nn.linear_out(h)
-    h = nn.crf(h, x.dims_w)
+    # h = nn.crf(h, x.dims_w)
 
     if Merlin.istraining()
         softmax_crossentropy(x.t, h)

@@ -21,17 +21,16 @@ struct IntDict{T}
     key2id::Dict{T,Int}
     id2key::Vector{T}
     id2count::Vector{Int}
-    default::Int
 end
-IntDict{T}(; default=0) where T = IntDict(Dict{T,Int}(), T[], default)
+IntDict{T}() where T = IntDict(Dict{T,Int}(), T[], Int[])
 
 Base.count(dict::IntDict, id::Int) = dict.id2count[id]
 Base.getkey(dict::IntDict, id::Int) = dict.id2key[id]
 Base.getindex(dict::IntDict, key) = dict.key2id[key]
-Base.get(dict::IntDict, key) = get(dict.key2id, key, dict.default)
+Base.get(dict::IntDict, key, default) = get(dict.key2id, key, default)
 Base.length(d::IntDict) = length(d.key2id)
 
-function Base.push!(dict::IntDict, key)
+function Base.get!(dict::IntDict, key)
     if haskey(dict.key2id, key)
         id = dict.key2id[key]
         dict.id2count[id] += 1
@@ -43,7 +42,6 @@ function Base.push!(dict::IntDict, key)
     end
     id
 end
-Base.append!(dict::IntDict, keys::Vector) = map(k -> push!(dict,k), keys)
 
 function Base.replace!(dict::IntDict, newid::Int; count::Int)
     for id = 1:length(dict)

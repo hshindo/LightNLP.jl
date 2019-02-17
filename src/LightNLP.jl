@@ -1,15 +1,5 @@
 module LightNLP
 
-using JLD2, FileIO
-
-function save(filename, obj)
-    #@save filename obj
-end
-
-function load(filename)
-    #@load filename "obj"
-end
-
 include("intdict.jl")
 #include("depparser/DepParser.jl")
 include("ner/NER.jl")
