@@ -23,8 +23,10 @@ function Model(config::Dict)
     chardict = IntDict{String}()
     tagdict = IntDict{String}()
     traindata = readconll(config["train_file"], worddict, chardict, tagdict, true)
+    devdata = readconll(config["dev_file"], worddict, chardict, tagdict, true)
     testdata = readconll(config["test_file"], worddict, chardict, tagdict, false)
     charembeds = Uniform(-0.01,0.01)(Float32, 20, length(chardict))
+    charembeds[:,chardict["unk"]] = zeros(Float32, 20)
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
@@ -52,31 +54,22 @@ function train!(model::Model, traindata, testdata)
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
-    #batchsize = 32
-    #losses = Float32[]
+
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
+        # opt.rate = config["learning_rate"] / (1 + 0.01*(epoch-1))
         #epoch == 200 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
-        #opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
-        opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
-        # opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        # opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
+        # opt.rate = 0.5 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
         #println("Learning rate: $(opt.opt.rate)")
-
-        #batchsize = config["batchsize"] * (1 + 0.05*(epoch-1))
-        #batchsize = round(Int, batchsize)
-        #println("Batchsize: $batchsize")
+        opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
-        # push!(losses, loss)
         loss /= length(traindata)
         println("Loss:\t$loss")
-        #if epoch % 5 == 0
-        #    minimum(losses) < losses[1] || (opt.rate /= 2.0)
-        #    empty!(losses)
-        #end
 
         #if opt.on
         #    yz = replace!(opt,params) do
@@ -85,6 +78,10 @@ function train!(model::Model, traindata, testdata)
         #else
         #    yz = evaluate(nn, testdata, batchsize=100)
         #end
+
+        res = evaluate(nn, testdata, batchsize=100)
+        fscore_sent(res)
+        #=
         yz = evaluate(nn, testdata, batchsize=100)
         golds, preds = Int[], Int[]
         for (y,z) in yz
@@ -94,10 +91,11 @@ function train!(model::Model, traindata, testdata)
         # accuracy(golds, preds, model.dicts.tag)
         # oracles = bioes_decode_oracle(preds, model.dicts.tag)
         # bioes_check(preds, model.dicts.tag)
-        preds = bioes_decode(preds, model.tagdict)
-        golds = bioes_decode(golds, model.tagdict)
+        preds = bioes_decode(model.tagdict, preds)
+        golds = bioes_decode(model.tagdict, golds)
         fscore(golds, preds)
         println()
+        =#
     end
     #model.nn = todevice(model.nn, -1)
 end
@@ -156,4 +154,41 @@ function accuracy(golds::Vector, preds::Vector, dict::Dict)
         acc = round(c/t, digits=5)
         println("$(tags[i]):\t$acc ($c/$t)")
     end
+end
+
+function fscore2(golds::Vector, preds::Vector)
+    @assert length(golds) == length(preds)
+    count = 0
+    gcount = 0
+    pcount = 0
+    for i = 1:length(golds)
+        set = intersect(Set(golds[i]), Set(preds[i]))
+        count += length(set)
+        gcount += length(golds[i])
+        pcount += length(preds[i])
+    end
+    prec = round(count/pcount, digits=5)
+    recall = round(count/gcount, digits=5)
+    fval = round(2*recall*prec/(recall+prec), digits=5)
+    println("----------")
+    println("Prec:\t$prec")
+    println("Recall:\t$recall")
+    println("Fscore:\t$fval")
+end
+
+function fscore_sent(res::Vector)
+    count_y, count_z, count_yz = 0, 0, 0
+    for (y,z) in res
+        count_y += length(y)
+        count_z += length(z)
+        set = intersect(Set(y), Set(z))
+        count_yz += length(set)
+    end
+    p = round(count_yz/count_z, digits=5)
+    r = round(count_yz/count_y, digits=5)
+    f = round(2r*p/(r+p), digits=5)
+    println("----------")
+    println("Prec:\t$p")
+    println("Recall:\t$r")
+    println("Fscore:\t$f")
 end

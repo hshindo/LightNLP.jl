@@ -1,38 +1,92 @@
-function bioes_decode(tagdict::IntDict{String}, tagids::Vector{Int})
-    nospan = tagdict["NO_SPAN"]
-    spans = Tuple{Int,Int,String}[]
-    offs = 0
-    for k = 1:10
-        n = length(tags)- k + 1
-        ids = tagids[offs+1:offs+n]
-        for i = 1:n
-            ids[i] == nospan && continue
-            tag = tagdict[ids[i]]
-            push!(spans, (i,i+k-1,tag))
+function bioes_encode!(tagdict::IntDict{String}, tags::Vector{String})
+    tag2id = Dict("O"=>1, "B"=>2, "I"=>3, "E"=>4, "S"=>5)
+    tagids = map(tags) do tag
+        t = tag == "O" ? tag : tag[1:1]
+        tag2id[t]
+    end
+
+    spanids = Int[]
+    spandims = Int[]
+    categids = Int[]
+    i = 1
+    while i <= length(tags)
+        tag = tags[i]
+        tag == "O" && (i += 1; continue)
+        categid = get!(tagdict, tag[3:end])
+        if startswith(tag, "B-")
+            I = "I-" * tag[3:end]
+            E = "E-" * tag[3:end]
+            j = findnext(t -> t != I, tags, i+1)
+            tags[j] == E || throw("Invalid BIOES.")
+            append!(spanids, i:j)
+            push!(spandims, j-i+1)
+            push!(categids, categid)
+            i = j
+        elseif startswith(tag, "S-")
+            push!(spanids, i)
+            push!(spandims, 1)
+            push!(categids, categid)
         end
-        offs += n
+        i += 1
+    end
+    tagids, spanids, spandims, categids
+end
+
+function bioes2span(tagids::Vector{Int})
+    id2tag = ["O", "B", "I", "E", "S"]
+    spans = Tuple{Int,Int}[]
+    bpos = 0
+    for i = 1:length(tagids)
+        tag = id2tag[tagids[i]]
+        tag == "O" && continue
+        tag == "B" && (bpos = i)
+        tag == "S" && (bpos = i)
+        if tag == "S" || (tag == "E" && bpos > 0)
+            push!(spans, (bpos,i))
+            bpos = 0
+        end
     end
     spans
 end
 
-function bioes_encode!(tagdict::IntDict{String}, tags::Vector{String})
-    spantags = [[tagdict["NO_SPAN"] for _=1:length(tags)-k+1] for k=1:10]
+#=
+function bioes_decode(catdict::IntDict{String}, tagids::Vector{Int})
+    id2tag = ["O", "B", "I", "E", "S"]
+    spans = Tuple{Int,Int,String}[]
     bpos = 0
-    for i = 1:length(tags)
-        tag = tags[i]
+    for i = 1:length(tagids)
+        tag = id2tag[tagids[i]]
         tag == "O" && continue
-        catid = get!(tagdict, tag[3:end])
-        if startswith(tag,"B")
-            bpos = i
-        elseif startswith(tag,"S")
-            spantags[1][i] = catid
-        elseif startswith(tag,"E")
-            spantags[i-bpos+1][bpos] = catid
+        startswith(tag,"B") && (bpos = i)
+        startswith(tag,"S") && (bpos = i)
+        if (startswith(tag,"S") || startswith(tag,"E")) && bpos > 0
+            push!(spans, (bpos,i,""))
             bpos = 0
         end
     end
-    cat(Iterators.flatten(spantags)..., dims=1)
+    spans
 end
+
+function bioes_decode(tagids::Vector{Int})
+    id2tag = ["O", "B", "I", "E", "S"]
+    s = Int[]
+    dims_s = Int[]
+    bpos = 0
+    for i = 1:length(tagids)
+        tag = id2tag[tagids[i]]
+        tag == "O" && continue
+        tag == "B" && (bpos = i)
+        tag == "S" && (bpos = i)
+        if tag == "S" || tag == "E" && bpos > 0
+            append!(s, bpos:i)
+            push!(dims_s, i-bpos+1)
+            bpos = 0
+        end
+    end
+    s = reshape(s, 1, length(s))
+    s, dims_s
+end
+=#
 
 function bioes_check(ids::Vector{Int}, tagdict::Dict{String,Int})
     id2tag = Array{String}(undef, length(tagdict))
@@ -95,7 +149,7 @@ end
 
 function bioes_decode2(tagdict::IntDict{String}, ids::Vector{Int})
     id2tag = Array{String}(undef, length(tagdict))
-    for (k,v) in tagdict
+    for (k,v) in tagdict.key2id
         id2tag[v] = k
     end
 
