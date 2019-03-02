@@ -32,7 +32,6 @@ function IntDict(keys::T...) where T
 end
 
 Base.count(dict::IntDict, id::Int) = dict.id2count[id]
-Base.count(dict::IntDict) = sum(dict.id2count)
 Base.getkey(dict::IntDict, id::Int) = dict.id2key[id]
 Base.getindex(dict::IntDict, key) = dict.key2id[key]
 Base.get(dict::IntDict, key, default) = get(dict.key2id, key, default)

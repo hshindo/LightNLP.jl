@@ -11,8 +11,6 @@ function Model(config::Dict)
     words = h5read(config["wordvec_file"], "words")
     wordembeds = h5read(config["wordvec_file"], "vectors")
     foreach(w -> get!(worddict,w), words)
-    # worddict = Dict(words[i] => i for i=1:length(words))
-    # wordembeds[:,worddict["unk"]] = zeros(Float32,size(wordembeds,1))
 
     #flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
     #flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
@@ -23,9 +21,9 @@ function Model(config::Dict)
     chardict = IntDict{String}()
     tagdict = IntDict{String}()
     traindata = readconll(config["train_file"], worddict, chardict, tagdict, true)
-    devdata = readconll(config["dev_file"], worddict, chardict, tagdict, true)
+    devdata = readconll(config["dev_file"], worddict, chardict, tagdict, false)
     testdata = readconll(config["test_file"], worddict, chardict, tagdict, false)
-    charembeds = Uniform(-0.01,0.01)(Float32, 20, length(chardict))
+    charembeds = Uniform(-0.001,0.001)(Float32, 20, length(chardict))
     charembeds[:,chardict["unk"]] = zeros(Float32, 20)
 
     if config["nn"] == "cnn"
@@ -43,17 +41,18 @@ function Model(config::Dict)
     @info "#Chars:\t$(length(chardict))"
     @info "#Tags:\t$(length(tagdict))"
     m = Model(config, worddict, chardict, tagdict, nn)
-    train!(m, traindata, testdata)
+    train!(m, traindata, devdata, testdata)
     m
 end
 
-function train!(model::Model, traindata, testdata)
+function train!(model::Model, traindata, devdata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
     opt = SGD()
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
+    maxdev, maxtest = (), ()
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
@@ -79,8 +78,21 @@ function train!(model::Model, traindata, testdata)
         #    yz = evaluate(nn, testdata, batchsize=100)
         #end
 
+        println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
-        fscore_sent(res)
+        testscore = fscore_sent(res)
+
+        println("-----Dev data-----")
+        res = evaluate(nn, devdata, batchsize=100)
+        devscore = fscore_sent(res)
+        if isempty(maxdev) || devscore.f > maxdev.f
+            maxdev = devscore
+            maxtest = testscore
+        end
+        println("-----Final test-----")
+        println(maxtest)
+        println()
+
         #=
         yz = evaluate(nn, testdata, batchsize=100)
         golds, preds = Int[], Int[]
@@ -191,4 +203,5 @@ function fscore_sent(res::Vector)
     println("Prec:\t$p")
     println("Recall:\t$r")
     println("Fscore:\t$f")
+    (p=p, r=r, f=f)
 end

@@ -51,7 +51,7 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
     data = []
     words = String[]
     tags = String[]
-    unkword = worddict["unk"]
+    unkword = get!(worddict, "unk")
     unkchar = get!(chardict, "unk")
     lowerchar = get!(chardict, "LOWER")
     upperchar = get!(chardict, "UPPER")
