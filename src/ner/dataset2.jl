@@ -72,8 +72,8 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
                 push!(countids, wordcount)
                 wordcount += 1
 
-                # w0 = replace(w, r"[0-9]"=>'0')
-                chars = Vector{Char}(w)
+                w0 = replace(w, r"[0-9]"=>'0')
+                chars = Vector{Char}(w0)
                 push!(chardims, length(chars))
                 #=
                 for c in chars
@@ -93,7 +93,7 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
                     elseif occursin(r"[0-9]", c)
                         case = "NUMBER"
                     else
-                        case = "MISC"
+                        case = c
                     end
                     lc = lowercase(c)
                     cmat[1,k] = training ? get!(chardict,c) : get(chardict,c,unkchar)
