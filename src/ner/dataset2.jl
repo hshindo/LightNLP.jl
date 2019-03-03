@@ -53,9 +53,6 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
     tags = String[]
     unkword = get!(worddict, "unk")
     unkchar = get!(chardict, "unk")
-    lowerchar = get!(chardict, "LOWER")
-    upperchar = get!(chardict, "UPPER")
-    numchar = get!(chardict, "NUMBER")
 
     lines = open(readlines, path)
     push!(lines, "")
@@ -90,21 +87,30 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
                 for k = 1:length(chars)
                     c = string(chars[k])
                     if occursin(r"[A-Z]", c)
-                        caseid = upperchar
+                        case = "UPPER"
                     elseif occursin(r"[a-z]", c)
-                        caseid = lowerchar
+                        case = "LOWER"
                     elseif occursin(r"[0-9]", c)
-                        caseid = numchar
+                        case = "NUMBER"
                     else
-                        caseid = get!(chardict, c)
+                        case = "MISC"
                     end
                     lc = lowercase(c)
                     cmat[1,k] = training ? get!(chardict,c) : get(chardict,c,unkchar)
                     cmat[2,k] = training ? get!(chardict,lc) : get(chardict,lc,unkchar)
-                    cmat[3,k] = caseid
+                    cmat[3,k] = training ? get!(chardict,case) : chardict[case]
                 end
                 push!(charids, cmat)
-
+                #=
+                chars = Vector{Char}(lowercase(w))
+                pushfirst!(chars, ' ')
+                push!(chars, ' ')
+                for k = 2:length(chars)-1
+                    c = string(chars[k-1:k+1])
+                    # charid = training ? get!(chardict,c) : get(chardict,c,unkchar)
+                    cmat[4,k-1] = training ? get!(chardict,c) : get(chardict,c,unkchar)
+                end
+                =#
             end
             charids = cat(charids..., dims=2)
             # charids = reshape(charids, 1, length(charids))
@@ -127,6 +133,17 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
         end
     end
     data = Vector{typeof(data[1])}(data)
+
+    if training
+        for x in data
+            charids = x[2]
+            for k = 1:length(charids)
+                if count(chardict,charids[k]) < 5
+                    charids[k] = unkchar
+                end
+            end
+        end
+    end
     Dataset(data)
 end
 

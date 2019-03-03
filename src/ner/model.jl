@@ -48,7 +48,7 @@ end
 function train!(model::Model, traindata, devdata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
-    opt = SGD()
+    opt = ASGD(SGD())
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
@@ -57,27 +57,28 @@ function train!(model::Model, traindata, devdata, testdata)
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # opt.rate = config["learning_rate"] / (1 + 0.01*(epoch-1))
-        #epoch == 200 && (opt.on = true)
+        epoch == 150 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
         # opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         # opt.rate = 0.5 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
         #println("Learning rate: $(opt.opt.rate)")
-        opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
+        opt.opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        #if opt.on
-        #    yz = replace!(opt,params) do
-        #        evaluate(nn, testdata, batchsize=100)
-        #    end
-        #else
-        #    yz = evaluate(nn, testdata, batchsize=100)
-        #end
-
+        if opt.on
+            res = replace!(opt,params) do
+                evaluate(nn, testdata, batchsize=100)
+            end
+        else
+            res = evaluate(nn, testdata, batchsize=100)
+        end
+        fscore_sent(res)
+        #=
         println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
         testscore = fscore_sent(res)
@@ -92,6 +93,7 @@ function train!(model::Model, traindata, devdata, testdata)
         println("-----Final test-----")
         println(maxtest)
         println()
+        =#
 
         #=
         yz = evaluate(nn, testdata, batchsize=100)
