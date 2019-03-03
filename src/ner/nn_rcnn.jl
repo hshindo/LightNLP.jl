@@ -15,11 +15,11 @@ function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ncategs) where T
     wordembeds = parameter(wordembeds)
     charembeds = parameter(charembeds)
     wsize = size(wordembeds, 1)
-    csize = 2*size(charembeds, 1)
+    csize = 3*size(charembeds, 1)
     # dropword = parameter(Uniform(-0.01,0.01)(T,wsize+csize))
 
     hsize = 700
-    conv_char = Conv1d(T, 3, csize, wsize, padding=1)
+    conv_char = Conv1d(T, 3, csize, csize, padding=1)
     conv_h = Conv1d(T, 3, wsize+wsize+2hsize, 2hsize, padding=1)
     l_out = Linear(T, hsize, 5)
     l_categ = Linear(T, hsize, ncategs)

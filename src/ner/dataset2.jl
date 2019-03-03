@@ -83,7 +83,7 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
                 end
                 =#
 
-                cmat = Array{Int}(undef, 2, length(chars))
+                cmat = Array{Int}(undef, 3, length(chars))
                 for k = 1:length(chars)
                     c = string(chars[k])
                     if occursin(r"[A-Z]", c)
@@ -95,8 +95,10 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
                     else
                         case = "MISC"
                     end
+                    lc = lowercase(c)
                     cmat[1,k] = training ? get!(chardict,c) : get(chardict,c,unkchar)
-                    cmat[2,k] = training ? get!(chardict,case) : get(chardict,case,unkchar)
+                    cmat[2,k] = training ? get!(chardict,lc) : get(chardict,lc,unkchar)
+                    cmat[3,k] = training ? get!(chardict,case) : get(chardict,case,unkchar)
                 end
                 push!(charids, cmat)
                 #=
