@@ -48,7 +48,7 @@ end
 function train!(model::Model, traindata, devdata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
-    opt = SGD()
+    opt = ASGD(SGD())
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
@@ -64,13 +64,13 @@ function train!(model::Model, traindata, devdata, testdata)
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
         #println("Learning rate: $(opt.opt.rate)")
-        opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
+        opt.opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-        #=
+
         if opt.on
             testres, devres = replace!(opt,params) do
                 a = evaluate(nn, testdata, batchsize=100)
@@ -81,13 +81,18 @@ function train!(model::Model, traindata, devdata, testdata)
             testres = evaluate(nn, testdata, batchsize=100)
             devres = evaluate(nn, devdata, batchsize=100)
         end
-        =#
+        println("-----Test data-----")
+        testscore = fscore_sent(testres)
+        println("-----Dev data-----")
+        devscore = fscore_sent(devres)
+        #=
         println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
         testscore = fscore_sent(res)
         println("-----Dev data-----")
         res = evaluate(nn, devdata, batchsize=100)
         devscore = fscore_sent(res)
+        =#
         if isempty(maxdev) || devscore.f > maxdev.f
             maxdev = devscore
             maxtest = testscore
