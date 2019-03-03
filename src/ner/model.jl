@@ -57,7 +57,7 @@ function train!(model::Model, traindata, devdata, testdata)
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # opt.rate = config["learning_rate"] / (1 + 0.01*(epoch-1))
-        # epoch == 150 && (opt.on = true)
+        epoch == 150 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
         # opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         # opt.rate = 0.5 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
