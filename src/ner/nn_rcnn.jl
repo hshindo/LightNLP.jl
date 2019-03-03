@@ -15,7 +15,7 @@ function NN_RCNN(wordembeds::Matrix{T}, charembeds::Matrix{T}, ncategs) where T
     wordembeds = parameter(wordembeds)
     charembeds = parameter(charembeds)
     wsize = size(wordembeds, 1)
-    csize = 3*size(charembeds, 1)
+    csize = 2*size(charembeds, 1)
     # dropword = parameter(Uniform(-0.01,0.01)(T,wsize+csize))
 
     hsize = 700

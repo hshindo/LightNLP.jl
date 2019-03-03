@@ -48,7 +48,7 @@ end
 function train!(model::Model, traindata, devdata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
-    opt = ASGD(SGD())
+    opt = SGD()
     nn = todevice(model.nn)
     params = parameters(nn)
     batchsize = config["batchsize"]
@@ -57,40 +57,34 @@ function train!(model::Model, traindata, devdata, testdata)
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # opt.rate = config["learning_rate"] / (1 + 0.01*(epoch-1))
-        epoch == 150 && (opt.on = true)
+        # epoch == 150 && (opt.on = true)
         #opt.alpha = opt.alpha / (1 + 0.1*epoch)
         # opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
         # opt.rate = 0.5 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
         #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
         #opt.opt.rate = 0.0
         #println("Learning rate: $(opt.opt.rate)")
-        opt.opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
+        opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
+        #=
         if opt.on
-            testres = replace!(opt,params) do
-                evaluate(nn, testdata, batchsize=100)
-            end
-            devres = replace!(opt,params) do
-                evaluate(nn, devdata, batchsize=100)
+            testres, devres = replace!(opt,params) do
+                a = evaluate(nn, testdata, batchsize=100)
+                b = evaluate(nn, devdata, batchsize=100)
+                a, b
             end
         else
             testres = evaluate(nn, testdata, batchsize=100)
             devres = evaluate(nn, devdata, batchsize=100)
         end
-        println("-----Test data-----")
-        fscore_sent(testres)
-        println("-----Dev data-----")
-        fscore_sent(devres)
-        println()
-        #=
+        =#
         println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
         testscore = fscore_sent(res)
-
         println("-----Dev data-----")
         res = evaluate(nn, devdata, batchsize=100)
         devscore = fscore_sent(res)
@@ -99,9 +93,9 @@ function train!(model::Model, traindata, devdata, testdata)
             maxtest = testscore
         end
         println("-----Final test-----")
+        println(maxdev)
         println(maxtest)
         println()
-        =#
 
         #=
         yz = evaluate(nn, testdata, batchsize=100)
