@@ -71,13 +71,21 @@ function train!(model::Model, traindata, devdata, testdata)
         println("Loss:\t$loss")
 
         if opt.on
-            res = replace!(opt,params) do
+            testres = replace!(opt,params) do
                 evaluate(nn, testdata, batchsize=100)
             end
+            devres = replace!(opt,params) do
+                evaluate(nn, devdata, batchsize=100)
+            end
         else
-            res = evaluate(nn, testdata, batchsize=100)
+            testres = evaluate(nn, testdata, batchsize=100)
+            devres = evaluate(nn, devdata, batchsize=100)
         end
-        fscore_sent(res)
+        println("-----Test data-----")
+        fscore_sent(testres)
+        println("-----Dev data-----")
+        fscore_sent(devres)
+        println()
         #=
         println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
