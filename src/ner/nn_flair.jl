@@ -29,7 +29,7 @@ function (nn::NN_Flair)(x::NamedTuple)
     c = max(c, x.dims_c)
     wc = concat(1, w, c, x.flair)
     # wc = dropout(wc, 0.5)
-    wc = dropout_dim(wc, 2, 0.2) # word-level dropout
+    wc = dropout_dim(wc, 2, 0.33) # word-level dropout
 
     h = zero(w, nn.hsize, size(w,2))
     g = zero(w, nn.hsize, length(x.dims_w))
