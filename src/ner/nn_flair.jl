@@ -28,17 +28,17 @@ function (nn::NN_Flair)(x::NamedTuple)
     c = nn.conv_char(c, x.dims_c)
     c = max(c, x.dims_c)
     wc = concat(1, w, c, x.flair)
-    wc = dropout(wc, 0.5)
+    # wc = dropout(wc, 0.5)
     wc = dropout_dim(wc, 2, 0.2) # word-level dropout
 
     h = zero(w, nn.hsize, size(w,2))
     g = zero(w, nn.hsize, length(x.dims_w))
-    #drop = LockedDropout(0.5)
+    drop = LockedDropout(0.5)
     hs = Var[]
     for i = 1:4
         g = expand(g, x.dims_w)
         h = concat(1, wc, h, g)
-        #h = drop(h)
+        h = drop(h)
         h = nn.conv_h(h, x.dims_w)
         h = gate(h)
         push!(hs, h)
