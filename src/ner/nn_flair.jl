@@ -33,10 +33,12 @@ function (nn::NN_Flair)(x::NamedTuple)
 
     h = zero(w, nn.hsize, size(w,2))
     g = zero(w, nn.hsize, length(x.dims_w))
+    #drop = LockedDropout(0.5)
     hs = Var[]
-    for i = 1:5
+    for i = 1:4
         g = expand(g, x.dims_w)
         h = concat(1, wc, h, g)
+        #h = drop(h)
         h = nn.conv_h(h, x.dims_w)
         h = gate(h)
         push!(hs, h)
