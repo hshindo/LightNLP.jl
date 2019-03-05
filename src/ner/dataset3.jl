@@ -2,11 +2,13 @@ using Unicode
 
 struct Dataset
     data::Vector
+    flair
 end
 
 Base.length(dataset::Dataset) = length(dataset.data)
 Base.getindex(dataset::Dataset, index::Int) = dataset.data[index]
 
+#=
 function Merlin.todevice(dataset::Dataset)
     data = map(dataset.data) do (w,c,dims_c,t,s,dims_s,categ,count)
         w = todevice(w)
@@ -19,6 +21,7 @@ function Merlin.todevice(dataset::Dataset)
     end
     Dataset(data)
 end
+=#
 
 function Base.getindex(dataset::Dataset, indexes::Vector{Int})
     data = dataset.data[indexes]
@@ -26,28 +29,30 @@ function Base.getindex(dataset::Dataset, indexes::Vector{Int})
     ws = map(x -> x.w, data)
     dims_w = length.(ws)
     w = cat(ws..., dims=1)
-    w = reshape(w, 1, length(w))
-    c = cat(map(x -> x.c, data)..., dims=2)
+    w = reshape(w, 1, length(w)) |> todevice
+    c = cat(map(x -> x.c, data)..., dims=2) |> todevice
     dims_c = cat(map(x -> x.dims_c, data)..., dims=1)
-    t = cat(map(x -> x.t, data)..., dims=1)
+    t = cat(map(x -> x.t, data)..., dims=1) |> todevice
 
     offs = 0
     s = map(data) do x
-        s = copy(x.s)
-        addto!(s, Cint(offs))
+        s = x.s .+ offs
         offs += length(x.w)
         s
     end
     s = cat(s..., dims=1)
-    s = reshape(s, 1, length(s))
+    s = reshape(s, 1, length(s)) |> todevice
     dims_s = cat(map(x -> x.dims_s, data)..., dims=1)
-    categ = cat(map(x -> x.categ, data)..., dims=1)
+    categ = cat(map(x -> x.categ, data)..., dims=1) |> todevice
+
     count = cat(map(x -> x.count, data)..., dims=1)
-    count = reshape(count, 1, length(count))
-    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), s=Var(s), dims_s=dims_s, categ=Var(categ), count=Var(count))
+    flair = cat(map(c -> dataset.flair[:,c], count)..., dims=2) |> todevice
+    # count = cat(map(x -> x.count, data)..., dims=1)
+    # count = reshape(count, 1, length(count)) |> todevice
+    (w=Var(w), c=Var(c), dims_w=dims_w, dims_c=dims_c, t=Var(t), s=Var(s), dims_s=dims_s, categ=Var(categ), flair=Var(flair))
 end
 
-function readconll(path::String, worddict, chardict, tagdict, training::Bool)
+function readconll(path::String, worddict, chardict, tagdict, training::Bool, flair)
     data = []
     words = String[]
     tags = String[]
@@ -98,7 +103,7 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
             charids = cat(charids..., dims=2)
             # charids = reshape(charids, 1, length(charids))
             tagids, spanids, spandims, categids = bioes_encode!(tagdict, tags)
-            push!(data, (wordids,charids,chardims,tagids,spanids,spandims,categids,countids))
+            push!(data, (w=wordids,c=charids,dims_c=chardims,t=tagids,s=spanids,dims_s=spandims,categ=categids,count=countids))
             empty!(words)
             empty!(tags)
         else
@@ -116,40 +121,5 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
         end
     end
     data = Vector{typeof(data[1])}(data)
-    Dataset(data)
-end
-
-function initvocab(path::String)
-    worddict = Dict{String,Int}()
-    chardict = Dict{String,Int}()
-    tagdict = Dict{String,Int}()
-    lines = open(readlines, path)
-    for line in lines
-        isempty(line) && continue
-        items = Vector{String}(split(line,"\t"))
-        word = strip(items[1])
-        chars = Vector{Char}(word)
-        for c in chars
-            c = string(c)
-            if haskey(chardict, c)
-                chardict[c] += 1
-            else
-                chardict[c] = 1
-            end
-        end
-
-        tag = strip(items[2])
-        haskey(tagdict,tag) || (tagdict[tag] = length(tagdict)+1)
-    end
-
-    chars = String[]
-    for (k,v) in chardict
-        v >= 3 && push!(chars,k)
-    end
-    chardict = Dict(chars[i] => i for i=1:length(chars))
-    chardict["UNKNOWN"] = length(chardict) + 1
-    chardict["LOWERCASE"] = length(chardict) + 1
-    chardict["UPPERCASE"] = length(chardict) + 1
-    chardict[" "] = length(chardict) + 1
-    chardict, tagdict
+    Dataset(data, flair)
 end

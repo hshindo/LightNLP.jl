@@ -1,41 +1,84 @@
-mutable struct NN_LSTM <: Functor
+mutable struct NN_Flair <: Functor
     wordembeds
-    flair_train
-    flair_test
-    lstm
-    linear
+    charembeds
+    hsize
+    conv_char
+    conv_h
+    l_out
+    l_categ
 end
 
-function NN_LSTM(wordembeds::Matrix{T}, flair_train, flair_test, ntags::Int) where T
-    wordembeds = Var(wordembeds)
-    wsize = size(wordembeds, 1) + size(flair_train, 1)
-    #l1 = Linear(T, wsize, wsize)
-    hsize = 256
-    lstm = LSTM(T, wsize, hsize, 1, 0.0, true)
-    linear = Linear(T, 2hsize, ntags)
-    NN_LSTM(wordembeds, flair_train, flair_test, lstm, linear)
+function NN_Flair(wordembeds::Matrix{T}, charembeds::Matrix{T}, ncategs, flairdim) where T
+    wordembeds = parameter(wordembeds)
+    charembeds = parameter(charembeds)
+    wsize = size(wordembeds, 1) + flairdim
+    csize = 3*size(charembeds, 1)
+
+    hsize = 700
+    conv_char = Conv1d(T, 3, csize, csize, padding=1)
+    conv_h = Conv1d(T, 3, wsize+csize+2hsize, 2hsize, padding=1)
+    l_out = Linear(T, hsize, 5)
+    l_categ = Linear(T, hsize, ncategs)
+    NN_Flair(wordembeds, charembeds, hsize, conv_char, conv_h, l_out, l_categ)
 end
 
-function (nn::NN_LSTM)(x::NamedTuple)
+function (nn::NN_Flair)(x::NamedTuple)
     w = lookup(nn.wordembeds, x.w)
-    if Merlin.istraining()
-        fw = lookup(nn.flair_train, x.count)
-    else
-        fw = lookup(nn.flair_test, x.count)
+    c = lookup(nn.charembeds, x.c)
+    c = nn.conv_char(c, x.dims_c)
+    c = max(c, x.dims_c)
+    wc = concat(1, w, c, x.flair)
+    wc = dropout(wc, 0.5)
+    wc = dropout_dim(wc, 2, 0.2) # word-level dropout
+
+    h = zero(w, nn.hsize, size(w,2))
+    g = zero(w, nn.hsize, length(x.dims_w))
+    hs = Var[]
+    for i = 1:5
+        g = expand(g, x.dims_w)
+        h = concat(1, wc, h, g)
+        h = nn.conv_h(h, x.dims_w)
+        h = gate(h)
+        push!(hs, h)
+        g = average(h, x.dims_w)
     end
-    w = concat(1, w, fw)
-    h = w
-    h = dropout_dim(h, 1, 0.5)
-    h = dropout_dim(h, 2, 0.05)
-    # h = nn.l1(h)
-    h, _, _ = nn.lstm(h, x.dims_w)
-    h = dropout_dim(h, 1, 0.5)
-    h = nn.linear(h)
+    h = concat(2, hs...)
+    h = reshape(h, size(h,1), size(hs[1],2), length(hs))
+    h = dropout(h, 0.5)
+    h = average(h, dims=3, keepdims=false)
+    o = nn.l_out(h)
+
     if Merlin.istraining()
-        softmax_crossentropy(x.t, h, x.dims_w)
+        l1 = softmax_crossentropy(x.t, o)
+        if isempty(x.s.data)
+            l1
+        else
+            s = lookup(h, x.s)
+            s = dropout(s, 0.5)
+            s = average(s, x.dims_s)
+            s = nn.l_categ(s)
+            l2 = softmax_crossentropy(x.categ, s)
+            l1 + l2
+        end
     else
-        y = Array{Int}(Array(x.t.data))
-        z = Array{Int}(Array(argmax(h.data,1)))
-        vec(y), vec(z)
+        o = Array{Int}(Array(argmax(o,dims=1)))
+        spans = bioes2span(vec(o))
+        if isempty(spans)
+            z = []
+        else
+            s, dims_s = expand_span(spans)
+            s = todevice(Var(s))
+            s = lookup(h, s)
+            s = dropout(s, 0.5)
+            s = average(s, dims_s)
+            s = nn.l_categ(s)
+            s = Array{Int}(Array(argmax(s,dims=1)))
+            z = map(x -> tuple(x[1]...,x[2]), zip(spans,vec(s)))
+        end
+        o = Array{Int}(Array(x.t.data))
+        spans = bioes2span(vec(o))
+        s = Array{Int}(Array(x.categ.data))
+        y = map(x -> tuple(x[1]...,x[2]), zip(spans,vec(s)))
+        y, z
     end
 end

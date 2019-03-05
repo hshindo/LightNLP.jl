@@ -12,24 +12,24 @@ function Model(config::Dict)
     wordembeds = h5read(config["wordvec_file"], "vectors")
     foreach(w -> get!(worddict,w), words)
 
-    #flair_train = Var(h5read(".data/flair.eng.train.h5", "vectors"))
-    #flair_test = Var(h5read(".data/flair.eng.testb.h5", "vectors"))
-    #flair_train = Var(rand(Float32,10,10))
-    #flair_test = Var(rand(Float32,10,10))
+    flair_train = h5read(".data/flair.eng.train.h5", "vectors")
+    flair_dev = h5read(".data/flair.eng.testa.h5", "vectors")
+    flair_test = h5read(".data/flair.eng.testb.h5", "vectors")
 
     # chardict, tagdict = initvocab(config["train_file"])
     chardict = IntDict{String}()
     tagdict = IntDict{String}()
-    traindata = readconll(config["train_file"], worddict, chardict, tagdict, true)
-    devdata = readconll(config["dev_file"], worddict, chardict, tagdict, false)
-    testdata = readconll(config["test_file"], worddict, chardict, tagdict, false)
+    traindata = readconll(config["train_file"], worddict, chardict, tagdict, true, flair_train)
+    devdata = readconll(config["dev_file"], worddict, chardict, tagdict, false, flair_dev)
+    testdata = readconll(config["test_file"], worddict, chardict, tagdict, false, flair_test)
     charembeds = Uniform(-0.001,0.001)(Float32, 20, length(chardict))
     charembeds[:,chardict["unk"]] = zeros(Float32, 20)
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        nn = NN_RCNN(wordembeds, charembeds, length(tagdict))
+        # nn = NN_RCNN(wordembeds, charembeds, length(tagdict))
+        nn = NN_Flair(wordembeds, charembeds, length(tagdict), size(flair_train,1))
         # nn = NN_LSTM(wordembeds, flair_train, flair_test, length(dicts.tag))
     else
         throw("Unknown nn")
@@ -48,29 +48,23 @@ end
 function train!(model::Model, traindata, devdata, testdata)
     config = model.config
     Merlin.setdevice(config["device"])
-    opt = ASGD(SGD())
+    opt = SGD()
     nn = todevice(model.nn)
-    params = parameters(nn)
+    # params = parameters(nn)
     batchsize = config["batchsize"]
     maxdev, maxtest = (), ()
 
     for epoch = 1:config["nepochs"]
         println("Epoch:\t$epoch")
         # opt.rate = config["learning_rate"] / (1 + 0.01*(epoch-1))
-        epoch == 150 && (opt.on = true)
-        #opt.alpha = opt.alpha / (1 + 0.1*epoch)
-        # opt.opt.rate = 0.1 * batchsize / sqrt(batchsize) / (1 + 0.05*(epoch-1))
-        # opt.rate = 0.5 * batchsize / sqrt(batchsize) / (1 + 0.05*epoch)
-        #opt.opt.rate = config["learning_rate"] * batchsize / sqrt(batchsize)
-        #opt.opt.rate = 0.0
-        #println("Learning rate: $(opt.opt.rate)")
-        opt.opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
+        #epoch == 150 && (opt.on = true)
+        opt.rate = config["learning_rate"] / (1 + 0.05*(epoch-1))
 
         loss = minimize!(nn, traindata, opt, batchsize=batchsize, shuffle=true)
         loss /= length(traindata)
         println("Loss:\t$loss")
 
-
+        #=
         if opt.on
             testres, devres = replace!(opt,params) do
                 a = evaluate(nn, testdata, batchsize=100)
@@ -85,14 +79,14 @@ function train!(model::Model, traindata, devdata, testdata)
         testscore = fscore_sent(testres)
         println("-----Dev data-----")
         devscore = fscore_sent(devres)
-        #=
+        =#
+
         println("-----Test data-----")
         res = evaluate(nn, testdata, batchsize=100)
         testscore = fscore_sent(res)
         println("-----Dev data-----")
         res = evaluate(nn, devdata, batchsize=100)
         devscore = fscore_sent(res)
-        =#
         if isempty(maxdev) || devscore.f > maxdev.f
             maxdev = devscore
             maxtest = testscore

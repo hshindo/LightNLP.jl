@@ -4,7 +4,7 @@
   "dev_file": ".data/eng.testa.BIOES",
   "test_file": ".data/eng.testb.BIOES",
   "nepochs": 200,
-  "learning_rate": 0.5,
+  "learning_rate": 0.3,
   "batchsize": 10,
   "training": true,
   "nn": "lstm",
