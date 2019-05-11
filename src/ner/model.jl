@@ -12,9 +12,9 @@ function Model(config::Dict)
     wordembeds = h5read(config["wordvec_file"], "vectors")
     foreach(w -> get!(worddict,w), words)
 
-    flair_train = h5read(".data/flair.eng.train.h5", "vectors")
-    flair_dev = h5read(".data/flair.eng.testa.h5", "vectors")
-    flair_test = h5read(".data/flair.eng.testb.h5", "vectors")
+    # flair_train = h5read(".data/flair.eng.train.h5", "vectors")
+    # flair_dev = h5read(".data/flair.eng.testa.h5", "vectors")
+    # flair_test = h5read(".data/flair.eng.testb.h5", "vectors")
 
     # chardict, tagdict = initvocab(config["train_file"])
     chardict = IntDict{String}()
@@ -22,14 +22,14 @@ function Model(config::Dict)
     traindata = readconll(config["train_file"], worddict, chardict, tagdict, true, flair_train)
     devdata = readconll(config["dev_file"], worddict, chardict, tagdict, false, flair_dev)
     testdata = readconll(config["test_file"], worddict, chardict, tagdict, false, flair_test)
-    charembeds = Uniform(-0.001,0.001)(Float32, 20, length(chardict))
+    charembeds = Uniform(-0.01,0.01)(Float32, 20, length(chardict))
     charembeds[:,chardict["unk"]] = zeros(Float32, 20)
 
     if config["nn"] == "cnn"
         #nn = nn_cnn(wordembeds, charembeds, length(tagdict))
     elseif config["nn"] == "lstm"
-        # nn = NN_RCNN(wordembeds, charembeds, length(tagdict))
-        nn = NN_Flair(wordembeds, charembeds, length(tagdict), size(flair_train,1))
+        nn = NN_RCNN(wordembeds, charembeds, length(tagdict))
+        # nn = NN_Flair(wordembeds, charembeds, length(tagdict), size(flair_train,1))
         # nn = NN_LSTM(wordembeds, flair_train, flair_test, length(dicts.tag))
     else
         throw("Unknown nn")
