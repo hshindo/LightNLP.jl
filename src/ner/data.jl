@@ -91,7 +91,7 @@ function readconll(path::String, worddict, chardict, tagdict, training::Bool)
             # charids = reshape(charids, 1, length(charids))
             tagids, spanids, spandims, categids = bioes_encode!(tagdict, tags)
             sample = Sample(wordids, nothing, charids, chardims, tagids, spanids, spandims, categids)
-            push!(data, sample)
+            length(wordids) > 1 && push!(data, sample)
             empty!(words)
             empty!(tags)
         else
